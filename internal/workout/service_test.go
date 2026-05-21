@@ -29,7 +29,7 @@ func TestService_Create(t *testing.T) {
 	got, err := svc.Create(ctx, CreateInput{
 		UserID: "user-1",
 		Name:   "  Leg Day  ", // leading/trailing space should be trimmed
-		Exercises: []domain.Exercise{
+		Exercises: []domain.LoggedExercise{
 			{Name: "Squat", Sets: 5, Reps: 5, WeightKG: 100},
 		},
 	})
@@ -72,8 +72,8 @@ func TestService_Create_Validation(t *testing.T) {
 	}{
 		{"missing user", CreateInput{Name: "x"}},
 		{"missing name", CreateInput{UserID: "user-1"}},
-		{"blank exercise name", CreateInput{UserID: "u", Name: "n", Exercises: []domain.Exercise{{Name: "   "}}}},
-		{"negative reps", CreateInput{UserID: "u", Name: "n", Exercises: []domain.Exercise{{Name: "Squat", Reps: -1}}}},
+		{"blank exercise name", CreateInput{UserID: "u", Name: "n", Exercises: []domain.LoggedExercise{{Name: "   "}}}},
+		{"negative reps", CreateInput{UserID: "u", Name: "n", Exercises: []domain.LoggedExercise{{Name: "Squat", Reps: -1}}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

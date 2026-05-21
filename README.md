@@ -1,158 +1,142 @@
 # go-workout-api
 
-A small, production-shaped REST API in Go for tracking workouts. Built on the **standard library only** — no web framework, no ORM, no third-party dependencies — to show clean backend architecture without hiding it behind tooling.
+A fitness backend in Go that does two things: **generates** structured training programs from a user's goal, equipment, experience, and injuries — and **logs** the workouts they actually do. Built on the **Go standard library only** — no web framework, no ORM, no third-party dependencies — so the architecture is visible rather than hidden behind tooling, and it clones, builds, and tests with nothing but a Go toolchain.
 
-The point of this repo is not the domain (workouts). It's the structure: how handlers, services, and storage are separated; how errors flow; how the thing is tested, containerized, and shut down cleanly.
+The headline feature is the generation engine: a constraint-and-coverage algorithm, not CRUD. It filters a movement library by equipment and injuries, picks a training split for the user's frequency, selects exercises for balanced muscle and movement-pattern coverage, and prescribes sets/reps/rest tuned to the goal.
+
+## Quick look
+
+```
+$ go run ./cmd/demo
+
+Goal: muscle_gain    Experience: intermediate    Split: Upper / Lower    Days/week: 4
+Working around injuries: [lower_back]
+
+Day 1 — Upper
+  1. Dumbbell Bench Press         4 x 8-12   rest 90s
+  2. Lat Pulldown                 4 x 8-12   rest 90s
+  3. Machine Shoulder Press       4 x 8-12   rest 90s
+  4. Seated Cable Row             4 x 8-12   rest 90s
+  5. Cable Biceps Curl            2 x 8-12   rest 90s
+  6. Cable Triceps Pushdown       2 x 8-12   rest 90s
+
+Day 2 — Lower
+  ...
+```
+
+(Selections vary by seed; the barbell back squat and deadlift are absent here because the request declared a lower-back injury.)
 
 ## What it demonstrates
 
-- **Layered architecture** — HTTP transport → service (business logic) → repository (storage), each depending only on the layer beneath it through interfaces.
-- **Dependency injection without a framework** — everything is wired explicitly in `cmd/api/main.go`.
-- **Interface-based storage** — the service depends on a `Repository` interface; an in-memory implementation ships here, and a Postgres implementation drops in without touching business logic (see [Extending to Postgres](#extending-to-postgres)).
-- **Testability by design** — the clock and ID generator are injected, so tests are deterministic. Unit tests cover the service; `httptest` tests cover the full routing + handler path.
-- **Idiomatic error handling** — typed domain errors mapped to HTTP status codes at the edge, with a stable error envelope for clients.
-- **Standard-library routing** — Go 1.22's method-aware `http.ServeMux` (`GET /v1/workouts/{id}`), no router dependency.
-- **Operational basics** — structured logging (`log/slog`), request IDs, panic recovery middleware, graceful shutdown, health check, multi-stage distroless Docker build, and CI.
+- **A real domain algorithm**, not request plumbing: split selection, candidate filtering, coverage-based exercise selection, and goal-based prescription.
+- **Constraint handling that matters**: equipment availability and injury contraindications are hard filters; experience gates movement difficulty.
+- **Two feature slices, one clean architecture**: plan generation (`internal/plan`) and workout logging (`internal/workout`) are independent vertical slices over a shared `domain` and `httpx`.
+- **Deterministic, testable design**: the engine's RNG and the logging service's clock/ID generator are injected, so tests are reproducible. The generate endpoint even accepts `?seed=` for repeatable output.
+- **Concurrency-aware transport**: the generate handler builds a fresh generator per request, so there's no shared mutable RNG state and no locking under concurrent load.
+- **Operational basics**: structured logging (`log/slog`), request IDs, panic-recovery middleware, graceful shutdown, health check, multi-stage distroless Docker build, and CI that runs `gofmt`, `vet`, and race-enabled tests.
+
+## How the engine works
+
+Generation is a four-stage pipeline (`internal/plan`):
+
+1. **Validate** the request — goal, experience, day count, and any equipment/injury values must be recognized.
+2. **Build the candidate pool** — filter the library to movements the user can do: equipment they have (bodyweight is always available), nothing contraindicated by an active injury, within their experience level.
+3. **Choose a split and select exercises** — pick a split for the training frequency (2–3 days → full body, 4 → upper/lower, 5–6 → push/pull/legs variants). For each day, satisfy its priority movement patterns first with the best-scoring candidates, then fill remaining slots for muscle coverage. Selection penalizes movements already used elsewhere in the week, so the program has variety.
+4. **Prescribe dosage** — set sets/reps/rest from the goal (strength → low reps, long rest; endurance → high reps, short rest; hypertrophy in between), then adjust for compound vs. isolation and the user's experience.
+
+Hard constraints (equipment, injuries) are enforced by *filtering*; soft preferences (compound-first, variety) by *scoring*. That separation is deliberate: an injured user must never see a contraindicated lift, but two equally-suitable accessory movements can be chosen flexibly.
 
 ## Project structure
 
 ```
 .
 ├── cmd/
-│   └── api/
-│       └── main.go            # entrypoint: wiring + graceful shutdown only
+│   ├── api/main.go          # HTTP server: wires both features + graceful shutdown
+│   └── demo/main.go         # prints a sample generated plan to stdout
 ├── internal/
-│   ├── domain/                # core types + errors; imports nothing internal
-│   │   ├── workout.go
-│   │   └── errors.go
-│   ├── workout/               # the workout feature, as a vertical slice
-│   │   ├── handler.go         # HTTP adapters (no business logic)
-│   │   ├── handler_test.go    # httptest coverage of routing + handlers
-│   │   ├── service.go         # business logic + validation
-│   │   ├── service_test.go    # deterministic unit tests
-│   │   ├── repository.go      # Repository interface + in-memory impl
-│   │   └── uuid.go            # crypto/rand UUIDv4 generator
-│   └── httpx/                 # cross-cutting transport helpers
-│       ├── respond.go         # JSON + error mapping
-│       └── middleware.go      # request ID, logging, recovery, chain
-├── .github/workflows/ci.yml   # gofmt + vet + race tests + build
-├── Dockerfile                 # multi-stage, static binary, distroless
+│   ├── domain/              # pure types: enums, library Exercise, GenerateRequest,
+│   │                        #   WorkoutPlan, logged Workout/LoggedExercise, errors
+│   ├── exercise/            # seed exercise library (~40 movements) + tests
+│   ├── plan/                # the engine + its HTTP handler
+│   ├── workout/             # logged-workout CRUD: handler, service, repository
+│   └── httpx/               # JSON + error mapping, middleware
+├── .github/workflows/ci.yml
+├── Dockerfile               # multi-stage, static binary, distroless
 ├── Makefile
 └── go.mod
 ```
 
-The feature-package layout (`internal/workout/` holds its own handler, service, and repository) keeps a vertical slice together. Adding a second feature — say `exercise` or `user` — means adding a sibling package, not threading a change through `handlers/`, `services/`, and `repositories/` directories.
+Two domain types intentionally coexist: **`Exercise`** is a library movement the engine can *prescribe*; **`LoggedExercise`** is a movement a user *performed* in a logged session. Keeping them distinct avoids overloading one type with two meanings.
 
-## Running locally
+## Running it
 
-Requires Go 1.22+.
+Requires Go 1.22+ (uses the standard library's method-aware routing). No other dependencies.
 
 ```bash
-make run            # starts on :8080
-# or: ADDR=:9000 go run ./cmd/api
+make demo            # print a sample plan
+make run             # start the API on :8080
+make test            # go test -race ./...
+make cover           # coverage summary
 ```
 
-Then:
+Generate a plan:
 
 ```bash
-# Health check
-curl -s localhost:8080/healthz
-
-# Create a workout (X-User-ID stands in for an authenticated user)
-curl -s -X POST localhost:8080/v1/workouts \
-  -H 'X-User-ID: user-1' \
+curl -s -X POST 'localhost:8080/v1/plans/generate?seed=42' \
   -H 'Content-Type: application/json' \
   -d '{
-        "name": "Leg Day",
-        "notes": "felt strong",
-        "exercises": [
-          {"name": "Back Squat", "sets": 5, "reps": 5, "weight_kg": 120},
-          {"name": "Romanian Deadlift", "sets": 3, "reps": 8, "weight_kg": 100}
-        ]
+        "goal": "muscle_gain",
+        "experience": "intermediate",
+        "days_per_week": 4,
+        "available_equipment": ["barbell","dumbbell","cable","bench","pullup_bar"],
+        "injuries": ["lower_back"]
       }'
-
-# List your workouts
-curl -s localhost:8080/v1/workouts -H 'X-User-ID: user-1'
-
-# Get one (use an id returned above)
-curl -s localhost:8080/v1/workouts/<id>
-
-# Delete one
-curl -s -X DELETE localhost:8080/v1/workouts/<id> -i
 ```
 
-## Testing
+Log a workout you did:
 
 ```bash
-make test     # go test -race ./...
-make cover    # coverage summary
-make vet      # go vet ./...
+curl -s -X POST localhost:8080/v1/workouts \
+  -H 'X-User-ID: user-1' -H 'Content-Type: application/json' \
+  -d '{"name":"Leg Day","exercises":[{"name":"Back Squat","sets":5,"reps":5,"weight_kg":120}]}'
 ```
-
-Tests run with the race detector and have no external dependencies, so CI is fast and hermetic.
 
 ## API
 
-| Method | Path                 | Auth header  | Body          | Success |
-|--------|----------------------|--------------|---------------|---------|
-| GET    | `/healthz`           | —            | —             | 200     |
-| POST   | `/v1/workouts`       | `X-User-ID`  | workout JSON  | 201     |
-| GET    | `/v1/workouts`       | `X-User-ID`  | —             | 200     |
-| GET    | `/v1/workouts/{id}`  | —            | —             | 200     |
-| DELETE | `/v1/workouts/{id}`  | —            | —             | 204     |
+| Method | Path                  | Auth        | Body              | Success |
+|--------|-----------------------|-------------|-------------------|---------|
+| GET    | `/healthz`            | —           | —                 | 200     |
+| POST   | `/v1/plans/generate`  | —           | `GenerateRequest` | 200     |
+| POST   | `/v1/workouts`        | `X-User-ID` | logged workout    | 201     |
+| GET    | `/v1/workouts`        | `X-User-ID` | —                 | 200     |
+| GET    | `/v1/workouts/{id}`   | —           | —                 | 200     |
+| DELETE | `/v1/workouts/{id}`   | —           | —                 | 204     |
 
-Errors use a stable envelope so clients branch on `code`, not on the message:
+`POST /v1/plans/generate` accepts an optional `?seed=<int>` for reproducible output. Errors use a stable envelope so clients branch on `code`, not the message:
 
 ```json
-{ "error": { "code": "not_found", "message": "resource not found" } }
+{ "error": { "code": "validation_failed", "message": "days_per_week must be between 2 and 6" } }
 ```
 
-| Condition          | Status | Code                |
-|--------------------|--------|---------------------|
-| Invalid input      | 400    | `validation_failed` |
-| Unknown resource   | 404    | `not_found`         |
-| Unexpected failure | 500    | `internal_error`    |
+**GenerateRequest fields**: `goal` (`fat_loss`, `muscle_gain`, `strength`, `endurance`, `general_fitness`), `experience` (`beginner`, `intermediate`, `advanced`), `days_per_week` (2–6), `session_minutes` (optional, 20–120), `available_equipment` (`barbell`, `dumbbell`, `cable`, `machine`, `kettlebell`, `bands`, `pullup_bar`, `bench`), `injuries` (`lower_back`, `knee`, `shoulder`, `elbow`, `wrist`, `hip`, `ankle`, `neck`).
 
-## Design notes and trade-offs
+## Design notes
 
-**Why no framework.** chi or gin would be reasonable in production, but for a reference implementation the standard library makes the architecture legible — there's no router magic between the request and the handler. Go 1.22's `ServeMux` covers method and path-parameter routing, which is most of what a framework provides.
+**Why no framework or database.** This is a focused backend, and the standard library makes the logic legible — Go 1.22's `ServeMux` handles method/path routing, and in-code data keeps it runnable with zero setup. Both data sources sit behind seams (the `exercise.Library()` function and the `workout.Repository` interface) so swapping in Postgres later is a localized change.
 
-**Why an in-memory store.** It keeps the repo runnable and the test suite hermetic. The important part is the `Repository` interface boundary: the service neither knows nor cares what's behind it. Swapping in Postgres is a localized change.
+**Why inject the RNG / clock / ID generator.** Variety needs randomness and timestamps need a clock, but tests need determinism. Injecting them gives both: reproducible tests, varied production behavior, and a `?seed=` escape hatch.
 
-**Why inject the clock and ID generator.** Time and randomness are the two things that make tests flaky. Injecting them makes `CreatedAt` and IDs deterministic in tests while defaulting to `time.Now` and random UUIDs in production.
+**Tests describe behavior, not implementation.** They assert the things a user cares about: injured movements never appear, unavailable equipment is never required, beginners aren't handed advanced lifts, splits match the requested frequency, prescriptions match the goal, and a bodyweight-only request still produces a usable plan.
 
-**Authentication is stubbed.** `X-User-ID` stands in for an authenticated principal. In production this would be JWT-verifying middleware that injects the user ID into the request context; the handlers would read it from the context instead of a header, and nothing else would change.
+## Roadmap
 
-**What's intentionally omitted.** Pagination, rate limiting, real persistence, and metrics/tracing are out of scope for a focused sample but are noted where they'd attach (the middleware chain, the repository interface, the list endpoint).
+Natural next steps, roughly in order:
 
-## Extending to Postgres
-
-The service depends only on `workout.Repository`. A Postgres implementation satisfies the same four methods and is selected in `main.go` — no other file changes. Sketch:
-
-```go
-type PostgresRepository struct {
-    db *sql.DB // or *pgxpool.Pool
-}
-
-func (r *PostgresRepository) Get(ctx context.Context, id string) (domain.Workout, error) {
-    const q = `SELECT id, user_id, name, notes, created_at FROM workouts WHERE id = $1`
-    var w domain.Workout
-    err := r.db.QueryRowContext(ctx, q, id).
-        Scan(&w.ID, &w.UserID, &w.Name, &w.Notes, &w.CreatedAt)
-    if errors.Is(err, sql.ErrNoRows) {
-        return domain.Workout{}, domain.ErrNotFound
-    }
-    return w, err
-}
-```
-
-```go
-// main.go
-repo := workout.NewPostgresRepository(pool) // instead of NewInMemoryRepository()
-svc := workout.NewService(repo, nil, nil)
-```
-
-That interface seam is the whole point of the layering: storage is a detail, not a dependency the business logic is coupled to.
+- **Persistence** — move the exercise library and both plans and logged sessions into Postgres behind repository interfaces; add migrations.
+- **Users & auth** — JWT-authenticated users who own profiles, generated plans, and logged sessions (replacing the `X-User-ID` stand-in).
+- **Close the loop** — link logged sessions back to the plan that produced them, to measure adherence.
+- **Personalization** — bias future generation toward what the user actually logs (e.g., away from repeatedly-skipped movements).
+- **Nutrition + grocery** — macro-target meal planning and grocery list aggregation.
 
 ## License
 

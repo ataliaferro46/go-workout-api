@@ -1,23 +1,21 @@
-// Package domain holds the core types and business invariants for the
-// application. It depends on nothing else in the codebase, which keeps the
-// dependency graph acyclic: every other package may import domain, but
-// domain imports no internal package.
 package domain
 
 import "time"
 
-// Workout represents a single training session belonging to a user.
+// Workout represents a single logged training session belonging to a user.
 type Workout struct {
-	ID        string     `json:"id"`
-	UserID    string     `json:"user_id"`
-	Name      string     `json:"name"`
-	Notes     string     `json:"notes,omitempty"`
-	Exercises []Exercise `json:"exercises"`
-	CreatedAt time.Time  `json:"created_at"`
+	ID        string           `json:"id"`
+	UserID    string           `json:"user_id"`
+	Name      string           `json:"name"`
+	Notes     string           `json:"notes,omitempty"`
+	Exercises []LoggedExercise `json:"exercises"`
+	CreatedAt time.Time        `json:"created_at"`
 }
 
-// Exercise is a single movement performed within a workout.
-type Exercise struct {
+// LoggedExercise is a movement the user actually performed in a session, with
+// the volume they did. It is distinct from the library Exercise (exercise.go),
+// which describes a movement the engine can prescribe.
+type LoggedExercise struct {
 	Name     string  `json:"name"`
 	Sets     int     `json:"sets"`
 	Reps     int     `json:"reps"`

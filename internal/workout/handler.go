@@ -7,8 +7,9 @@ import (
 	"github.com/ataliaferro46/go-workout-api/internal/httpx"
 )
 
-// Handler adapts HTTP requests to Service calls. It contains no business
-// logic: it parses input, calls the service, and formats the response.
+// Handler adapts HTTP requests to Service calls for logged workouts. It
+// contains no business logic: it parses input, calls the service, and formats
+// the response.
 type Handler struct {
 	svc *Service
 }
@@ -27,12 +28,12 @@ func (h *Handler) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /v1/workouts/{id}", h.delete)
 }
 
-// createRequest is the wire format for creating a workout. It is separate
-// from CreateInput so the public API can change without touching the service.
+// createRequest is the wire format for logging a workout. It is separate from
+// CreateInput so the public API can change without touching the service.
 type createRequest struct {
-	Name      string            `json:"name"`
-	Notes     string            `json:"notes"`
-	Exercises []domain.Exercise `json:"exercises"`
+	Name      string                  `json:"name"`
+	Notes     string                  `json:"notes"`
+	Exercises []domain.LoggedExercise `json:"exercises"`
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {

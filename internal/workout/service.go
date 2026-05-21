@@ -16,8 +16,8 @@ type IDGenerator func() string
 // and not dependent on the wall clock.
 type Clock func() time.Time
 
-// Service contains the business logic for workouts. It depends only on the
-// Repository interface and two small function types, which makes it trivial
+// Service contains the business logic for logging workouts. It depends only on
+// the Repository interface and two small function types, which makes it trivial
 // to unit-test in isolation from HTTP and storage.
 type Service struct {
 	repo  Repository
@@ -37,14 +37,12 @@ func NewService(repo Repository, newID IDGenerator, now Clock) *Service {
 	return &Service{repo: repo, newID: newID, now: now}
 }
 
-// CreateInput carries the fields needed to create a workout. Keeping it
-// separate from the HTTP request type and the domain type means the
-// transport and persistence layers can evolve independently.
+// CreateInput carries the fields needed to log a workout.
 type CreateInput struct {
 	UserID    string
 	Name      string
 	Notes     string
-	Exercises []domain.Exercise
+	Exercises []domain.LoggedExercise
 }
 
 // Create validates the input, assembles a domain.Workout, and persists it.
@@ -61,7 +59,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (domain.Workout, e
 		CreatedAt: s.now().UTC(),
 	}
 	if w.Exercises == nil {
-		w.Exercises = []domain.Exercise{}
+		w.Exercises = []domain.LoggedExercise{}
 	}
 	if err := s.repo.Create(ctx, w); err != nil {
 		return domain.Workout{}, err
@@ -69,12 +67,12 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (domain.Workout, e
 	return w, nil
 }
 
-// Get returns a single workout by ID.
+// Get returns a single logged workout by ID.
 func (s *Service) Get(ctx context.Context, id string) (domain.Workout, error) {
 	return s.repo.Get(ctx, id)
 }
 
-// ListByUser returns all workouts belonging to a user.
+// ListByUser returns all logged workouts belonging to a user.
 func (s *Service) ListByUser(ctx context.Context, userID string) ([]domain.Workout, error) {
 	if strings.TrimSpace(userID) == "" {
 		return nil, &domain.ValidationError{Message: "user id is required"}
@@ -82,7 +80,7 @@ func (s *Service) ListByUser(ctx context.Context, userID string) ([]domain.Worko
 	return s.repo.ListByUser(ctx, userID)
 }
 
-// Delete removes a workout by ID.
+// Delete removes a logged workout by ID.
 func (s *Service) Delete(ctx context.Context, id string) error {
 	return s.repo.Delete(ctx, id)
 }

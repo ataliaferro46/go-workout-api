@@ -1,16 +1,9 @@
-# Binaries
 /bin/
 *.exe
-
-# Test / coverage output
 *.out
 coverage.*
-
-# Local env
 .env
 .env.local
-
-# Editor / OS noise
 .DS_Store
 .idea/
 .vscode/

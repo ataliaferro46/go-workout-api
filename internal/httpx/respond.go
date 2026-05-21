@@ -1,6 +1,5 @@
-// Package httpx contains transport-layer helpers: JSON encoding, a stable
-// error envelope, request decoding, and middleware. Keeping these here means
-// feature handlers stay small and consistent.
+// Package httpx contains transport-layer helpers shared by handlers: JSON
+// encoding, a stable error envelope, request decoding, and middleware.
 package httpx
 
 import (
@@ -12,8 +11,8 @@ import (
 	"github.com/ataliaferro46/go-workout-api/internal/domain"
 )
 
-// JSON writes v as a JSON response with the given status code. A nil v
-// writes only the status (useful for 204 No Content).
+// JSON writes v as a JSON response with the given status code. A nil v writes
+// only the status (useful for 204 No Content).
 func JSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
@@ -21,8 +20,6 @@ func JSON(w http.ResponseWriter, status int, v any) {
 		return
 	}
 	if err := json.NewEncoder(w).Encode(v); err != nil {
-		// The header is already written, so we can't change the status;
-		// just record that the body failed to serialize.
 		slog.Error("failed to encode response body", "error", err)
 	}
 }
@@ -37,8 +34,7 @@ type errorBody struct {
 }
 
 // Error maps a domain error to an HTTP status code and writes the envelope.
-// Unknown errors become 500 and are logged; their details are not leaked to
-// the client.
+// Unknown errors become 500 and are logged without leaking details.
 func Error(w http.ResponseWriter, err error) {
 	var (
 		status        int
@@ -66,8 +62,8 @@ func Error(w http.ResponseWriter, err error) {
 	JSON(w, status, body)
 }
 
-// DecodeJSON decodes the request body into dst and rejects unknown fields,
-// so typos and unexpected payloads fail loudly rather than silently.
+// DecodeJSON decodes the request body into dst and rejects unknown fields, so
+// typos and unexpected payloads fail loudly rather than silently.
 func DecodeJSON(r *http.Request, dst any) error {
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()

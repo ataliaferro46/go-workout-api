@@ -10,8 +10,8 @@ import (
 	"github.com/ataliaferro46/go-workout-api/internal/domain"
 )
 
-// newTestServer builds a mux wired to a fresh in-memory service, exercising
-// the same routing the real server uses.
+// newTestServer builds a mux wired to a fresh in-memory service, exercising the
+// same routing the real server uses.
 func newTestServer() *http.ServeMux {
 	svc := NewService(NewInMemoryRepository(), nil, nil)
 	mux := http.NewServeMux()
@@ -103,7 +103,6 @@ func TestHandler_Get_NotFound(t *testing.T) {
 func TestHandler_DeleteAndList(t *testing.T) {
 	mux := newTestServer()
 
-	// Seed one workout.
 	body, _ := json.Marshal(map[string]any{"name": "Pull Day"})
 	req := httptest.NewRequest(http.MethodPost, "/v1/workouts", bytes.NewReader(body))
 	req.Header.Set("X-User-ID", "user-9")
@@ -112,7 +111,6 @@ func TestHandler_DeleteAndList(t *testing.T) {
 	var created domain.Workout
 	_ = json.Unmarshal(rec.Body.Bytes(), &created)
 
-	// Delete it.
 	req = httptest.NewRequest(http.MethodDelete, "/v1/workouts/"+created.ID, nil)
 	rec = httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -120,7 +118,6 @@ func TestHandler_DeleteAndList(t *testing.T) {
 		t.Fatalf("delete status = %d, want %d", rec.Code, http.StatusNoContent)
 	}
 
-	// List should now be empty for that user.
 	req = httptest.NewRequest(http.MethodGet, "/v1/workouts", nil)
 	req.Header.Set("X-User-ID", "user-9")
 	rec = httptest.NewRecorder()

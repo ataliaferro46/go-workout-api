@@ -8,10 +8,10 @@ import (
 	"github.com/ataliaferro46/go-workout-api/internal/domain"
 )
 
-// Repository abstracts persistence so the service is storage-agnostic.
-// Any backing store (Postgres, DynamoDB, etc.) can satisfy this interface;
-// the in-memory implementation below is used for tests and for running the
-// service without a database. See the README for a Postgres sketch.
+// Repository abstracts persistence for logged workouts so the service is
+// storage-agnostic. The in-memory implementation below is used for tests and
+// for running the service without a database; a Postgres implementation can
+// satisfy the same interface.
 type Repository interface {
 	Create(ctx context.Context, w domain.Workout) error
 	Get(ctx context.Context, id string) (domain.Workout, error)
@@ -19,9 +19,9 @@ type Repository interface {
 	Delete(ctx context.Context, id string) error
 }
 
-// InMemoryRepository is a concurrency-safe, in-memory Repository. The
-// RWMutex allows concurrent reads while serializing writes — the same
-// access pattern a real datastore connection pool would exhibit.
+// InMemoryRepository is a concurrency-safe, in-memory Repository. The RWMutex
+// allows concurrent reads while serializing writes — the access pattern a real
+// datastore connection pool would exhibit.
 type InMemoryRepository struct {
 	mu       sync.RWMutex
 	workouts map[string]domain.Workout
@@ -51,8 +51,8 @@ func (r *InMemoryRepository) Get(ctx context.Context, id string) (domain.Workout
 	return w, nil
 }
 
-// ListByUser returns a user's workouts, newest first. The result is always
-// a non-nil slice so callers (and JSON output) get [] rather than null.
+// ListByUser returns a user's workouts, newest first. The result is always a
+// non-nil slice so callers (and JSON output) get [] rather than null.
 func (r *InMemoryRepository) ListByUser(ctx context.Context, userID string) ([]domain.Workout, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

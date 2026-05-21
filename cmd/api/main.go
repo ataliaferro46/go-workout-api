@@ -1,6 +1,6 @@
-// Command api is the HTTP entrypoint. It does only wiring: construct
-// dependencies, register routes, start the server, and shut down gracefully.
-// All behavior lives in the internal packages.
+// Command api serves the fitness backend: workout plan generation and logged
+// workout tracking. It does only wiring — build dependencies, register routes,
+// start the server, shut down gracefully. All behavior lives in internal/.
 package main
 
 import (
@@ -13,7 +13,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ataliaferro46/go-workout-api/internal/exercise"
 	"github.com/ataliaferro46/go-workout-api/internal/httpx"
+	"github.com/ataliaferro46/go-workout-api/internal/plan"
 	"github.com/ataliaferro46/go-workout-api/internal/workout"
 )
 
@@ -23,22 +25,20 @@ func main() {
 
 	addr := getenv("ADDR", ":8080")
 
-	// Dependency wiring. To persist data, replace NewInMemoryRepository with
-	// a type that implements workout.Repository against Postgres (see README)
-	// — nothing else in the program needs to change.
-	repo := workout.NewInMemoryRepository()
-	svc := workout.NewService(repo, nil, nil)
-	handler := workout.NewHandler(svc)
-
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
-	handler.Routes(mux)
 
-	// Middleware order (outermost first): recover wraps everything so a panic
-	// in any layer is caught; logging records the final status; request ID is
-	// available to both.
+	// Plan generation. The handler is stateless over the immutable library; to
+	// persist generated plans, add a repository behind it (see README).
+	plan.NewHandler(exercise.Library()).Routes(mux)
+
+	// Logged workout tracking. Swap NewInMemoryRepository for a Postgres-backed
+	// implementation of workout.Repository to persist sessions.
+	workoutSvc := workout.NewService(workout.NewInMemoryRepository(), nil, nil)
+	workout.NewHandler(workoutSvc).Routes(mux)
+
 	root := httpx.Chain(mux,
 		httpx.Recover(logger),
 		httpx.Logger(logger),
@@ -53,8 +53,6 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Start the server in a goroutine so main can block on either a fatal
-	// server error or an OS shutdown signal.
 	serverErr := make(chan error, 1)
 	go func() {
 		logger.Info("server starting", "addr", addr)
@@ -82,7 +80,6 @@ func main() {
 	}
 }
 
-// getenv returns the value of key, or fallback if key is unset or empty.
 func getenv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v

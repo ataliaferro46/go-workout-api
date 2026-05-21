@@ -9,15 +9,14 @@ import (
 	"time"
 )
 
-// contextKey is unexported so no other package can collide with our context
-// keys — the standard pattern for storing values in a context.
+// contextKey is unexported so other packages cannot collide with our keys.
 type contextKey string
 
 const requestIDKey contextKey = "request_id"
 
 // RequestID attaches a unique request ID to the context and echoes it in the
-// response header. If the client supplied an X-Request-ID it is reused, which
-// lets a trace span multiple services.
+// response header, reusing a client-supplied X-Request-ID when present so a
+// trace can span services.
 func RequestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.Header.Get("X-Request-ID")
@@ -36,8 +35,6 @@ func RequestIDFromContext(ctx context.Context) string {
 	return id
 }
 
-// statusRecorder wraps http.ResponseWriter to capture the status code so the
-// logging middleware can record it.
 type statusRecorder struct {
 	http.ResponseWriter
 	status int
@@ -49,7 +46,7 @@ func (s *statusRecorder) WriteHeader(code int) {
 }
 
 // Logger logs one structured line per request with method, path, status, and
-// latency. Pulling the request ID from the context ties logs to traces.
+// latency, tying logs to traces via the request ID.
 func Logger(log *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -67,8 +64,8 @@ func Logger(log *slog.Logger) func(http.Handler) http.Handler {
 	}
 }
 
-// Recover turns a panic in any downstream handler into a 500 response and a
-// logged error, so one bad request can't take down the whole process.
+// Recover converts a panic in any downstream handler into a 500 response and a
+// logged error, so one bad request can't take down the process.
 func Recover(log *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -91,9 +88,8 @@ func Recover(log *slog.Logger) func(http.Handler) http.Handler {
 	}
 }
 
-// Chain applies middlewares so the first argument is the outermost wrapper.
-// Chain(h, A, B) yields A(B(h)): A runs first on the way in, last on the way
-// out.
+// Chain applies middlewares so the first argument is the outermost wrapper:
+// Chain(h, A, B) yields A(B(h)).
 func Chain(h http.Handler, middlewares ...func(http.Handler) http.Handler) http.Handler {
 	for i := len(middlewares) - 1; i >= 0; i-- {
 		h = middlewares[i](h)
@@ -101,9 +97,6 @@ func Chain(h http.Handler, middlewares ...func(http.Handler) http.Handler) http.
 	return h
 }
 
-// newRequestID returns a 128-bit random hex string. crypto/rand failures are
-// extremely unlikely; if one occurs we degrade to a placeholder rather than
-// failing the request.
 func newRequestID() string {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {

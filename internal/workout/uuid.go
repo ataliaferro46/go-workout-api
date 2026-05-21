@@ -5,10 +5,9 @@ import (
 	"encoding/hex"
 )
 
-// NewUUID returns a random RFC 4122 version 4 UUID string. It uses
-// crypto/rand so identifiers are not predictable. A failure to read from
-// the system CSPRNG is treated as fatal, because we cannot safely mint
-// identifiers without it.
+// NewUUID returns a random RFC 4122 version 4 UUID string. It uses crypto/rand
+// so identifiers are not predictable. A failure to read from the system CSPRNG
+// is treated as fatal, because we cannot safely mint identifiers without it.
 func NewUUID() string {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
