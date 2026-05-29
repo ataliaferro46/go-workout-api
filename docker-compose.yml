@@ -1,0 +1,26 @@
+# Local Postgres for development and integration tests. Intentionally minimal
+# — one service, fixed credentials, named volume — because production storage
+# is expected to be managed (RDS, Cloud SQL, Neon, etc.), not run from compose.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: workout-postgres
+    environment:
+      POSTGRES_USER: workout
+      POSTGRES_PASSWORD: workout
+      POSTGRES_DB: workout
+    ports:
+      # Host port 5433 to avoid colliding with a system-local Postgres on 5432.
+      # The container still listens on 5432 internally; the Makefile's
+      # DATABASE_URL points at host:5433.
+      - "5433:5432"
+    volumes:
+      - workout_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U workout -d workout"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  workout_pgdata:

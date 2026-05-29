@@ -1,6 +1,8 @@
 # go-workout-api
 
-A fitness backend in Go that does two things: **generates** structured training programs from a user's goal, equipment, experience, and injuries — and **logs** the workouts they actually do. Built on the **Go standard library only** — no web framework, no ORM, no third-party dependencies — so the architecture is visible rather than hidden behind tooling, and it clones, builds, and tests with nothing but a Go toolchain.
+A fitness backend in Go that does two things: **generates** structured training programs from a user's goal, equipment, experience, and injuries — and **logs** the workouts they actually do. Built on Go's **net/http and standard library** with two narrow runtime dependencies — `pgx` for Postgres and `goose` for embedded migrations — chosen because they are a driver and a migration runner, not a framework. There is no web framework and no ORM, so the architecture is visible rather than hidden behind tooling.
+
+Storage is **interface-shaped**: a `workout.Repository` is either in-memory (default; perfect for `go run` and unit tests) or Postgres-backed (when `DATABASE_URL` is set). The rest of the program — handlers, service, validation, tests — doesn't change between modes.
 
 The headline feature is the generation engine: a constraint-and-coverage algorithm, not CRUD. It filters a movement library by equipment and injuries, picks a training split for the user's frequency, selects exercises for balanced muscle and movement-pattern coverage, and prescribes sets/reps/rest tuned to the goal.
 
@@ -34,6 +36,7 @@ Day 2 — Lower
 - **Deterministic, testable design**: the engine's RNG and the logging service's clock/ID generator are injected, so tests are reproducible. The generate endpoint even accepts `?seed=` for repeatable output.
 - **Concurrency-aware transport**: the generate handler builds a fresh generator per request, so there's no shared mutable RNG state and no locking under concurrent load.
 - **Operational basics**: structured logging (`log/slog`), request IDs, panic-recovery middleware, graceful shutdown, health check, multi-stage distroless Docker build, and CI that runs `gofmt`, `vet`, and race-enabled tests.
+- **Real persistence behind an interface**: a Postgres-backed `workout.Repository` with embedded migrations runs alongside the in-memory implementation, and a single contract-test suite is run against both so the implementations cannot drift.
 
 ## How the engine works
 
@@ -51,17 +54,21 @@ Hard constraints (equipment, injuries) are enforced by *filtering*; soft prefere
 ```
 .
 ├── cmd/
-│   ├── api/main.go          # HTTP server: wires both features + graceful shutdown
-│   └── demo/main.go         # prints a sample generated plan to stdout
+│   ├── api/main.go             # HTTP server: storage selection + graceful shutdown
+│   └── demo/main.go            # prints a sample generated plan to stdout
 ├── internal/
-│   ├── domain/              # pure types: enums, library Exercise, GenerateRequest,
-│   │                        #   WorkoutPlan, logged Workout/LoggedExercise, errors
-│   ├── exercise/            # seed exercise library (~40 movements) + tests
-│   ├── plan/                # the engine + its HTTP handler
-│   ├── workout/             # logged-workout CRUD: handler, service, repository
-│   └── httpx/               # JSON + error mapping, middleware
+│   ├── domain/                 # pure types: enums, library Exercise, GenerateRequest,
+│   │                           #   WorkoutPlan, logged Workout/LoggedExercise, errors
+│   ├── exercise/               # seed exercise library (~40 movements) + tests
+│   ├── plan/                   # the engine + its HTTP handler
+│   ├── workout/                # logged-workout CRUD: handler, service,
+│   │                           #   in-memory + Postgres repositories, contract test
+│   ├── db/                     # pgxpool factory + goose-driven migrations
+│   │   └── migrations/         # embedded *.sql, applied at boot
+│   └── httpx/                  # JSON + error mapping, middleware
+├── docker-compose.yml          # local Postgres for dev + integration tests
 ├── .github/workflows/ci.yml
-├── Dockerfile               # multi-stage, static binary, distroless
+├── Dockerfile                  # multi-stage, static binary, distroless
 ├── Makefile
 └── go.mod
 ```
@@ -70,14 +77,26 @@ Two domain types intentionally coexist: **`Exercise`** is a library movement the
 
 ## Running it
 
-Requires Go 1.22+ (uses the standard library's method-aware routing). No other dependencies.
+Requires Go 1.22+ (uses the standard library's method-aware routing) and Docker (only if you want Postgres locally; in-memory mode needs neither).
 
 ```bash
 make demo            # print a sample plan
-make run             # start the API on :8080
-make test            # go test -race ./...
+make run             # start the API on :8080 (in-memory storage)
+make test            # go test -race ./...   (unit tests only)
 make cover           # coverage summary
 ```
+
+### With Postgres
+
+```bash
+make db-up                 # docker compose up -d postgres
+make run-pg                # API with DATABASE_URL pointed at compose
+make test-integration      # run the repository contract against Postgres
+```
+
+`DATABASE_URL` is the on/off switch for Postgres mode. With it unset the server uses the in-memory repository and starts in milliseconds — no Docker, no `go get` for runtime; the Postgres path is exercised only when you opt in.
+
+Migrations are embedded in the binary (`internal/db/migrations/*.sql` via `embed.FS`) and run at boot, so a deployed container brings an empty database to schema by itself — no sidecar, no separate migration image.
 
 Generate a plan:
 
@@ -122,7 +141,11 @@ curl -s -X POST localhost:8080/v1/workouts \
 
 ## Design notes
 
-**Why no framework or database.** This is a focused backend, and the standard library makes the logic legible — Go 1.22's `ServeMux` handles method/path routing, and in-code data keeps it runnable with zero setup. Both data sources sit behind seams (the `exercise.Library()` function and the `workout.Repository` interface) so swapping in Postgres later is a localized change.
+**Why no framework.** Go 1.22's `ServeMux` handles method/path routing natively and the standard library makes the request flow legible — what middleware runs, in what order, with what state. A framework would hide all of that.
+
+**Why pgx + goose, not an ORM or sqlc.** `pgx` is the Postgres driver, not a framework around it — the SQL in `internal/workout/postgres_repository.go` is the SQL that runs. `goose` is small, embeddable via `embed.FS`, and removes the need for a separate migration sidecar. `sqlc` was considered: it generates a beautiful type-safe query layer at scale, but it adds a separate code-generation step and a non-Go binary dependency. For the current query surface, hand-written SQL is short enough to read in one sitting and avoids the toolchain.
+
+**Why two repositories instead of one.** In-memory storage exists for fast, hermetic unit tests and one-line `go run` demos; Postgres exists for the real product. A shared **contract test** (`repository_contract_test.go`) runs the same scenarios against both, so the implementations cannot silently diverge.
 
 **Why inject the RNG / clock / ID generator.** Variety needs randomness and timestamps need a clock, but tests need determinism. Injecting them gives both: reproducible tests, varied production behavior, and a `?seed=` escape hatch.
 
@@ -132,7 +155,8 @@ curl -s -X POST localhost:8080/v1/workouts \
 
 Natural next steps, roughly in order:
 
-- **Persistence** — move the exercise library and both plans and logged sessions into Postgres behind repository interfaces; add migrations.
+- ~~**Persistence** — Postgres behind a repository interface with embedded migrations.~~ ✓ done.
+- **Persist generated plans** — promote plan generation from a stateless endpoint to a `plan.Repository` so users can revisit programs.
 - **Users & auth** — JWT-authenticated users who own profiles, generated plans, and logged sessions (replacing the `X-User-ID` stand-in).
 - **Close the loop** — link logged sessions back to the plan that produced them, to measure adherence.
 - **Personalization** — bias future generation toward what the user actually logs (e.g., away from repeatedly-skipped movements).
