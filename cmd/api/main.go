@@ -3,11 +3,11 @@
 // start the server, shut down gracefully. All behavior lives in internal/.
 //
 // Storage is selected at startup by DATABASE_URL:
-//   - unset: in-memory repository, suitable for `go run` and demos.
-//   - set:   Postgres pool, with migrations applied at boot.
+//   - unset: in-memory repositories, suitable for `go run` and demos.
+//   - set:   one shared Postgres pool, with migrations applied at boot.
 //
 // Either way the rest of the program is identical because both repositories
-// satisfy the same workout.Repository interface.
+// satisfy their feature's interface.
 package main
 
 import (
@@ -33,29 +33,31 @@ func main() {
 
 	addr := getenv("ADDR", ":8080")
 	dsn := os.Getenv("DATABASE_URL")
+	library := exercise.Library()
 
-	// Build the workout repository before the HTTP server starts so a
-	// misconfigured DSN fails fast instead of surfacing as a 500 on the first
-	// request. The pool's lifetime is bound to a closer registered below.
-	repo, repoClose, err := buildWorkoutRepo(context.Background(), logger, dsn)
+	// Build storage once, share across features. A single pgxpool serves both
+	// the plan and workout repositories — connection pooling exists precisely
+	// to multiplex concurrent users across a bounded resource, so opening two
+	// pools against the same database would double connection usage for no
+	// benefit. closer tears the pool down on shutdown.
+	planRepo, workoutRepo, closer, err := buildStorage(context.Background(), logger, dsn)
 	if err != nil {
 		logger.Error("storage init failed", "error", err)
 		os.Exit(1)
 	}
-	defer repoClose()
+	defer closer()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
-	// Plan generation. The handler is stateless over the immutable library; to
-	// persist generated plans, add a repository behind it (see README).
-	plan.NewHandler(exercise.Library()).Routes(mux)
+	// Plan generation + retrieval. The Service wraps the engine with
+	// persistence so generated plans are durable.
+	plan.NewHandler(plan.NewService(library, planRepo, nil, nil)).Routes(mux)
 
-	// Logged workout tracking. Repo is in-memory or Postgres depending on
-	// DATABASE_URL; nothing else in this file changes.
-	workout.NewHandler(workout.NewService(repo, nil, nil)).Routes(mux)
+	// Logged workout tracking.
+	workout.NewHandler(workout.NewService(workoutRepo, nil, nil)).Routes(mux)
 
 	// Middleware order is load-bearing:
 	//   - RequestID is OUTERMOST so the ID it puts into the request context is
@@ -109,25 +111,30 @@ func main() {
 	}
 }
 
-// buildWorkoutRepo returns a Repository plus a closer the caller must defer.
-// The closer is a no-op for in-memory mode; it tears down the pgxpool for
-// Postgres mode. Returning a closer rather than the pool directly keeps the
-// caller insulated from which storage was selected.
-func buildWorkoutRepo(ctx context.Context, logger *slog.Logger, dsn string) (workout.Repository, func(), error) {
+// buildStorage returns the plan + workout repositories backed either by
+// in-memory implementations (when dsn is empty) or by a single shared Postgres
+// pool. The closer tears down the pool on shutdown; in in-memory mode it is a
+// no-op. Returning a single closer keeps `main` insulated from which storage
+// mode was selected.
+func buildStorage(ctx context.Context, logger *slog.Logger, dsn string) (plan.Repository, workout.Repository, func(), error) {
 	if dsn == "" {
 		logger.Info("storage", "mode", "in-memory")
-		return workout.NewInMemoryRepository(), func() {}, nil
+		return plan.NewInMemoryRepository(),
+			workout.NewInMemoryRepository(),
+			func() {}, nil
 	}
 
 	logger.Info("storage", "mode", "postgres")
 	if err := db.Migrate(dsn); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	pool, err := db.NewPool(ctx, dsn)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return workout.NewPostgresRepository(pool), pool.Close, nil
+	return plan.NewPostgresRepository(pool),
+		workout.NewPostgresRepository(pool),
+		pool.Close, nil
 }
 
 func getenv(key, fallback string) string {

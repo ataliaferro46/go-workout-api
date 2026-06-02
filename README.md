@@ -98,11 +98,11 @@ make test-integration      # run the repository contract against Postgres
 
 Migrations are embedded in the binary (`internal/db/migrations/*.sql` via `embed.FS`) and run at boot, so a deployed container brings an empty database to schema by itself — no sidecar, no separate migration image.
 
-Generate a plan:
+Generate a plan (now persists; the response includes the assigned `id`):
 
 ```bash
 curl -s -X POST 'localhost:8080/v1/plans/generate?seed=42' \
-  -H 'Content-Type: application/json' \
+  -H 'X-User-ID: user-1' -H 'Content-Type: application/json' \
   -d '{
         "goal": "muscle_gain",
         "experience": "intermediate",
@@ -110,6 +110,14 @@ curl -s -X POST 'localhost:8080/v1/plans/generate?seed=42' \
         "available_equipment": ["barbell","dumbbell","cable","bench","pullup_bar"],
         "injuries": ["lower_back"]
       }'
+```
+
+Retrieve plans:
+
+```bash
+curl -s localhost:8080/v1/plans -H 'X-User-ID: user-1'         # list this user's plans
+curl -s localhost:8080/v1/plans/<plan-id>                       # fetch one by id
+curl -s -X DELETE localhost:8080/v1/plans/<plan-id>             # delete one
 ```
 
 Log a workout you did:
@@ -125,7 +133,10 @@ curl -s -X POST localhost:8080/v1/workouts \
 | Method | Path                  | Auth        | Body              | Success |
 |--------|-----------------------|-------------|-------------------|---------|
 | GET    | `/healthz`            | —           | —                 | 200     |
-| POST   | `/v1/plans/generate`  | —           | `GenerateRequest` | 200     |
+| POST   | `/v1/plans/generate`  | `X-User-ID` | `GenerateRequest` | 201     |
+| GET    | `/v1/plans`           | `X-User-ID` | —                 | 200     |
+| GET    | `/v1/plans/{id}`      | —           | —                 | 200     |
+| DELETE | `/v1/plans/{id}`      | —           | —                 | 204     |
 | POST   | `/v1/workouts`        | `X-User-ID` | logged workout    | 201     |
 | GET    | `/v1/workouts`        | `X-User-ID` | —                 | 200     |
 | GET    | `/v1/workouts/{id}`   | —           | —                 | 200     |
@@ -161,6 +172,14 @@ Natural next steps, roughly in order:
 - **Close the loop** — link logged sessions back to the plan that produced them, to measure adherence.
 - **Personalization** — bias future generation toward what the user actually logs (e.g., away from repeatedly-skipped movements).
 - **Nutrition + grocery** — macro-target meal planning and grocery list aggregation.
+
+## Architecture decisions
+
+Every non-trivial design choice in this codebase — feature slicing, the two `Exercise`
+types, hard-vs-soft constraints in the engine, the Repository contract test, embedded
+migrations, middleware ordering, distroless Docker, and ~30 more — is documented in
+[ARCHITECTURE.md](ARCHITECTURE.md). Each entry includes the context, the decision, the
+reasoning, and the trade-offs accepted.
 
 ## License
 
