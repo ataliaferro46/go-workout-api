@@ -77,7 +77,7 @@ Two domain types intentionally coexist: **`Exercise`** is a library movement the
 
 ## Running it
 
-Requires Go 1.22+ (uses the standard library's method-aware routing) and Docker (only if you want Postgres locally; in-memory mode needs neither).
+Requires Go 1.25+ (the version pgx and goose currently require; the codebase also relies on Go 1.22's method-aware `ServeMux`) and Docker (only if you want Postgres locally; in-memory mode needs neither).
 
 ```bash
 make demo            # print a sample plan

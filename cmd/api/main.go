@@ -57,10 +57,21 @@ func main() {
 	// DATABASE_URL; nothing else in this file changes.
 	workout.NewHandler(workout.NewService(repo, nil, nil)).Routes(mux)
 
+	// Middleware order is load-bearing:
+	//   - RequestID is OUTERMOST so the ID it puts into the request context is
+	//     visible to every layer that wraps the handler (Logger and Recover
+	//     both read request_id off r.Context() on the response path).
+	//   - Logger sits in the middle so its one-line-per-request log fires
+	//     whether the handler returned normally or Recover turned a panic into
+	//     a 500 — its statusRecorder captures whatever status was finally
+	//     written.
+	//   - Recover is INNERMOST around the handler so a panic in the handler
+	//     is caught synchronously and converted to a 500 with the standard
+	//     envelope. Logger then logs that 500 as a normal completed request.
 	root := httpx.Chain(mux,
-		httpx.Recover(logger),
-		httpx.Logger(logger),
 		httpx.RequestID,
+		httpx.Logger(logger),
+		httpx.Recover(logger),
 	)
 
 	srv := &http.Server{
