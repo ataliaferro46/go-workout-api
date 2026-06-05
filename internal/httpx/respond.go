@@ -47,6 +47,8 @@ func Error(w http.ResponseWriter, err error) {
 		status, code = http.StatusBadRequest, "validation_failed"
 	case errors.Is(err, domain.ErrNotFound):
 		status, code = http.StatusNotFound, "not_found"
+	case errors.Is(err, domain.ErrConflict):
+		status, code = http.StatusConflict, "conflict"
 	default:
 		status, code = http.StatusInternalServerError, "internal_error"
 		slog.Error("unhandled error", "error", err)

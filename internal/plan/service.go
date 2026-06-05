@@ -16,11 +16,19 @@ type IDGenerator func() string
 // dependent on the wall clock.
 type Clock func() time.Time
 
+// LibrarySource returns the current exercise library snapshot. Plan.Service
+// holds a LibrarySource (not a static slice) so admin edits to the exercise
+// library take effect on the next Generate call without a process restart.
+// In production, main.go passes exercise.Service.Snapshot; in tests, a
+// closure over a static fixture.
+type LibrarySource func() []domain.Exercise
+
 // Service owns the lifecycle of generated workout plans: it wraps the
 // Generator with persistence, ID generation, and timestamping. The Handler
-// depends on the Service; the Service depends on the Repository interface.
+// depends on the Service; the Service depends on the Repository interface
+// and the LibrarySource function.
 type Service struct {
-	library []domain.Exercise
+	library LibrarySource
 	repo    Repository
 	newID   IDGenerator
 	now     Clock
@@ -28,7 +36,7 @@ type Service struct {
 
 // NewService constructs a Service. Passing nil for newID or now selects
 // production defaults (random UUIDs and the system clock).
-func NewService(library []domain.Exercise, repo Repository, newID IDGenerator, now Clock) *Service {
+func NewService(library LibrarySource, repo Repository, newID IDGenerator, now Clock) *Service {
 	if newID == nil {
 		newID = NewUUID
 	}
@@ -49,8 +57,10 @@ func (s *Service) Create(ctx context.Context, userID string, req domain.Generate
 	}
 
 	// Build a fresh Generator per call so concurrent requests do not share
-	// mutable RNG state (mirrors the rationale in ADR-013).
-	gen := NewGenerator(s.library, seed)
+	// mutable RNG state (mirrors the rationale in ADR-013). The library is
+	// read at call time from the LibrarySource so admin edits take effect
+	// immediately.
+	gen := NewGenerator(s.library(), seed)
 	p, err := gen.Generate(req)
 	if err != nil {
 		return domain.WorkoutPlan{}, err

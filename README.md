@@ -98,6 +98,12 @@ make test-integration      # run the repository contract against Postgres
 
 Migrations are embedded in the binary (`internal/db/migrations/*.sql` via `embed.FS`) and run at boot, so a deployed container brings an empty database to schema by itself — no sidecar, no separate migration image.
 
+`ADMIN_API_KEY` gates the `/v1/admin/*` write endpoints. Generate one and export it; if unset, admin endpoints fail closed with a 400. Constant-time comparison in the middleware defends against timing-attack key enumeration.
+
+```bash
+ADMIN_API_KEY=$(openssl rand -hex 32) make run    # or run-pg
+```
+
 Generate a plan (now persists; the response includes the assigned `id`):
 
 ```bash
@@ -128,19 +134,37 @@ curl -s -X POST localhost:8080/v1/workouts \
   -d '{"name":"Leg Day","exercises":[{"name":"Back Squat","sets":5,"reps":5,"weight_kg":120}]}'
 ```
 
+Browse the exercise library, or edit it as admin:
+
+```bash
+curl -s localhost:8080/v1/exercises | jq '.exercises | length'   # ~94 movements
+curl -s localhost:8080/v1/exercises/barbell-back-squat
+
+# Admin endpoints require X-Admin-API-Key set to ADMIN_API_KEY.
+ADMIN_API_KEY=$(openssl rand -hex 32)   # one-time, then export
+curl -s -X POST localhost:8080/v1/admin/exercises \
+  -H "X-Admin-API-Key: $ADMIN_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"id":"my-move","name":"My Movement", ...}'
+```
+
 ## API
 
-| Method | Path                  | Auth        | Body              | Success |
-|--------|-----------------------|-------------|-------------------|---------|
-| GET    | `/healthz`            | —           | —                 | 200     |
-| POST   | `/v1/plans/generate`  | `X-User-ID` | `GenerateRequest` | 201     |
-| GET    | `/v1/plans`           | `X-User-ID` | —                 | 200     |
-| GET    | `/v1/plans/{id}`      | —           | —                 | 200     |
-| DELETE | `/v1/plans/{id}`      | —           | —                 | 204     |
-| POST   | `/v1/workouts`        | `X-User-ID` | logged workout    | 201     |
-| GET    | `/v1/workouts`        | `X-User-ID` | —                 | 200     |
-| GET    | `/v1/workouts/{id}`   | —           | —                 | 200     |
-| DELETE | `/v1/workouts/{id}`   | —           | —                 | 204     |
+| Method | Path                              | Auth                 | Body              | Success |
+|--------|-----------------------------------|----------------------|-------------------|---------|
+| GET    | `/healthz`                        | —                    | —                 | 200     |
+| POST   | `/v1/plans/generate`              | `X-User-ID`          | `GenerateRequest` | 201     |
+| GET    | `/v1/plans`                       | `X-User-ID`          | —                 | 200     |
+| GET    | `/v1/plans/{id}`                  | —                    | —                 | 200     |
+| DELETE | `/v1/plans/{id}`                  | —                    | —                 | 204     |
+| POST   | `/v1/workouts`                    | `X-User-ID`          | logged workout    | 201     |
+| GET    | `/v1/workouts`                    | `X-User-ID`          | —                 | 200     |
+| GET    | `/v1/workouts/{id}`               | —                    | —                 | 200     |
+| DELETE | `/v1/workouts/{id}`               | —                    | —                 | 204     |
+| GET    | `/v1/exercises`                   | —                    | —                 | 200     |
+| GET    | `/v1/exercises/{id}`              | —                    | —                 | 200     |
+| POST   | `/v1/admin/exercises`             | `X-Admin-API-Key`    | `domain.Exercise` | 201     |
+| PUT    | `/v1/admin/exercises/{id}`        | `X-Admin-API-Key`    | `domain.Exercise` | 200     |
+| DELETE | `/v1/admin/exercises/{id}`        | `X-Admin-API-Key`    | —                 | 204     |
 
 `POST /v1/plans/generate` accepts an optional `?seed=<int>` for reproducible output. Errors use a stable envelope so clients branch on `code`, not the message:
 

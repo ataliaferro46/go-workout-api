@@ -792,6 +792,113 @@ that; defer until it does.
 
 ---
 
+## Exercise library on Postgres + admin endpoints
+
+### ADR-059: Exercise library moves from in-code to Postgres
+
+**Context.** The library was a `var library = []domain.Exercise{...}` slice compiled into
+the binary. Editing it required a code change, a PR, and a redeploy.
+
+**Decision.** Persist the library in the `exercises` table. Public read endpoints serve
+the canonical list. Admin write endpoints under `/v1/admin/exercises/*` allow CRUD on it.
+
+**Why.** A code-managed library means every iteration on movements, cleanup of typos, or
+addition of new variants is a deploy. For a data set that grows continuously over the
+life of the product, that bottleneck is the wrong one. Postgres is the right shape for
+runtime-editable data.
+
+**Trade-offs.** Adds a database table, an HTTP surface, and an interim auth boundary
+(ADR-061). For the demo path, the in-memory mode seeds from `seed.go` at boot so the
+zero-setup `go run` story is preserved.
+
+### ADR-060: Boot-time snapshot cached via `atomic.Pointer`
+
+**Context.** The plan engine calls `library()` on every plan generation, iterating ~100
+exercises many times per call. A naive implementation would hit Postgres for every
+generation, which is wasteful for read-mostly data that changes rarely.
+
+**Decision.** `exercise.Service` holds an `atomic.Pointer[[]domain.Exercise]`. At boot,
+`LoadSnapshot` reads the full library into the pointer. The plan service's
+`LibrarySource` calls `Snapshot()` on each Generate, which is a single atomic load. Admin
+writes (Create/Update/Delete) refresh the snapshot before returning, so subsequent reads
+see the new state.
+
+**Why.** Read-mostly data with infrequent writes is the canonical fit for a copy-on-write
+cache. `atomic.Pointer` gives us lock-free reads (one CPU instruction) and atomic
+single-writer semantics; concurrent reads cannot tear, and `LoadSnapshot` can run
+alongside reads without coordination.
+
+**Trade-offs.** The cache adds a small window where two replicas hold different
+snapshots — replica A wrote, replica B's snapshot is stale until its next
+LoadSnapshot. Acceptable: admin writes are rare, replicas can poll, and the next
+generation on replica B uses fresh data once it reloads. A real-time invalidation
+mechanism (NOTIFY/LISTEN, Redis pub/sub) would close the window if it ever matters.
+
+### ADR-061: Admin endpoints gated behind `ADMIN_API_KEY` middleware
+
+**Context.** Admin endpoints need auth. The roadmap calls for real JWT-based auth, but
+that's a separate effort; meanwhile admin writes need *some* gate.
+
+**Decision.** A small `httpx.AdminAuth` middleware reads `ADMIN_API_KEY` from env and
+gates admin routes via `X-Admin-API-Key` header. Constant-time comparison via
+`subtle.ConstantTimeCompare` defends against timing-attack key enumeration. Missing or
+empty `ADMIN_API_KEY` fails closed (every admin request gets 400 with "admin api not
+configured").
+
+**Why.** A real, secure stopgap unblocks shipping admin endpoints without the auth-
+system rewrite. Constant-time comparison is the right call even at this scale — it's
+two lines of code and removes a real (if exotic) attack vector. Fail-closed on missing
+config is the safe default; a forgotten env var should not silently open admin to the
+world.
+
+**Trade-offs.** A single shared API key has no per-user audit trail and no rotation
+story. Acceptable until real auth lands; the admin endpoint surface is small, the user
+count of admins is also small, and the migration to JWT is a localized change in
+`main.go` (swap one middleware for another).
+
+### ADR-062: Schema-only migrations + runtime seed-on-empty
+
+**Context.** Migration 0003 introduces the `exercises` table. The seed data could either
+be embedded in the migration (94 INSERT statements duplicating `seed.go`) or loaded at
+runtime by an `exercise.SeedIfEmpty` helper that bulk-inserts from `seed.go` if the
+table is empty.
+
+**Decision.** Schema-only migration. Runtime seed via `SeedIfEmpty` at first Postgres
+mode boot.
+
+**Why.** `seed.go` is the source of truth for what the library *is*; duplicating it in
+SQL is a maintenance bug waiting to happen. The runtime helper reads the same Go data
+that the in-memory mode uses, so the two paths cannot drift. SeedIfEmpty tolerates per-row
+ErrDuplicateName so a partial-then-retried seed converges instead of erroring out.
+
+**Trade-offs.** Postgres state is no longer fully reproducible from migration history
+alone — the initial seed depends on a Go binary executing once. Acceptable for a
+code-managed library where the seed is documentation; would not be acceptable for
+customer data. The migration's docstring documents this so reviewers don't expect
+classic seed-via-INSERT semantics.
+
+### ADR-063: Per-route AdminAuth via per-handler wrapping (no admin sub-mux)
+
+**Context.** Go 1.22's `ServeMux` doesn't natively support per-route-group middleware
+chains. Two patterns work: (a) build a separate admin sub-mux and chain AdminAuth
+around the whole sub-mux; (b) wrap each admin HandlerFunc individually with AdminAuth
+before registering it on the main mux.
+
+**Decision.** Per-handler wrapping. Each admin route is registered as
+`mux.Handle("POST /v1/admin/...", adminAuth(http.HandlerFunc(...)))`.
+
+**Why.** Per-handler wrapping makes the auth requirement visible at the registration
+site — a reviewer reading `Routes()` sees the gate next to the route. The sub-mux
+alternative hides the gate elsewhere and creates a path-prefix dependency that an
+absent-minded contributor could break by adding a route on the wrong mux.
+
+**Trade-offs.** Five admin routes today; if it grew to twenty, the boilerplate would
+motivate refactoring to a sub-mux or to a library like `chi` that has native route
+groups. Today the cost is small and the safety property of "the gate is at the
+declaration site" is worth it.
+
+---
+
 ## Deferred / planned
 
 Decisions not yet made because the surface that requires them doesn't exist yet. Listed

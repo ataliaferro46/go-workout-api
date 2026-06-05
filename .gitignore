@@ -7,3 +7,5 @@ coverage.*
 .DS_Store
 .idea/
 .vscode/
+# Personal notes (interview prep, etc.) — not part of the public repo.
+_personal/

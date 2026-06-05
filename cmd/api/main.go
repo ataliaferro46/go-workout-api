@@ -33,14 +33,14 @@ func main() {
 
 	addr := getenv("ADDR", ":8080")
 	dsn := os.Getenv("DATABASE_URL")
-	library := exercise.Library()
+	adminKey := os.Getenv("ADMIN_API_KEY")
 
-	// Build storage once, share across features. A single pgxpool serves both
-	// the plan and workout repositories — connection pooling exists precisely
-	// to multiplex concurrent users across a bounded resource, so opening two
-	// pools against the same database would double connection usage for no
-	// benefit. closer tears the pool down on shutdown.
-	planRepo, workoutRepo, closer, err := buildStorage(context.Background(), logger, dsn)
+	// Build storage once, share across features. A single pgxpool serves
+	// the plan, workout, and exercise repositories — connection pooling
+	// exists to multiplex concurrent work across a bounded resource, so
+	// opening three pools against the same database would burn slots for
+	// no benefit. closer tears the pool down on shutdown.
+	deps, closer, err := buildStorage(context.Background(), logger, dsn)
 	if err != nil {
 		logger.Error("storage init failed", "error", err)
 		os.Exit(1)
@@ -52,12 +52,19 @@ func main() {
 		httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
+	// Exercise library — public read endpoints + admin write endpoints
+	// gated by ADMIN_API_KEY. The Snapshot() method exposes the cached
+	// library that the plan service reads on every Generate call.
+	exercise.NewHandler(deps.exerciseSvc).Routes(mux, httpx.AdminAuth(adminKey))
+
 	// Plan generation + retrieval. The Service wraps the engine with
-	// persistence so generated plans are durable.
-	plan.NewHandler(plan.NewService(library, planRepo, nil, nil)).Routes(mux)
+	// persistence so generated plans are durable. The library is fetched
+	// from the exercise service on each Create call, so admin edits take
+	// effect without a restart.
+	plan.NewHandler(plan.NewService(deps.exerciseSvc.Snapshot, deps.planRepo, nil, nil)).Routes(mux)
 
 	// Logged workout tracking.
-	workout.NewHandler(workout.NewService(workoutRepo, nil, nil)).Routes(mux)
+	workout.NewHandler(workout.NewService(deps.workoutRepo, nil, nil)).Routes(mux)
 
 	// Middleware order is load-bearing:
 	//   - RequestID is OUTERMOST so the ID it puts into the request context is
@@ -111,30 +118,66 @@ func main() {
 	}
 }
 
-// buildStorage returns the plan + workout repositories backed either by
-// in-memory implementations (when dsn is empty) or by a single shared Postgres
-// pool. The closer tears down the pool on shutdown; in in-memory mode it is a
-// no-op. Returning a single closer keeps `main` insulated from which storage
-// mode was selected.
-func buildStorage(ctx context.Context, logger *slog.Logger, dsn string) (plan.Repository, workout.Repository, func(), error) {
+// deps groups the dependencies the HTTP layer needs. Returning a struct
+// instead of N positional values keeps main.go readable as the dependency
+// tree grows (Spec 1 and Spec 2 would each add a service).
+type deps struct {
+	planRepo    plan.Repository
+	workoutRepo workout.Repository
+	exerciseSvc *exercise.Service
+}
+
+// buildStorage returns the three feature dependencies backed either by
+// in-memory implementations (when dsn is empty) or by a single shared
+// Postgres pool. The closer tears down the pool on shutdown; in in-memory
+// mode it is a no-op.
+//
+// The exercise service is constructed and warmed (LoadSnapshot) before
+// returning, because the plan service depends on its Snapshot being
+// populated at boot. Failure to load the initial snapshot is fatal — better
+// to crash-loop than to serve plans from a nil library.
+func buildStorage(ctx context.Context, logger *slog.Logger, dsn string) (deps, func(), error) {
 	if dsn == "" {
 		logger.Info("storage", "mode", "in-memory")
-		return plan.NewInMemoryRepository(),
-			workout.NewInMemoryRepository(),
-			func() {}, nil
+		exerciseRepo := exercise.NewInMemoryRepository(exercise.Seed())
+		exerciseSvc := exercise.NewService(exerciseRepo)
+		if err := exerciseSvc.LoadSnapshot(ctx); err != nil {
+			return deps{}, nil, err
+		}
+		return deps{
+			planRepo:    plan.NewInMemoryRepository(),
+			workoutRepo: workout.NewInMemoryRepository(),
+			exerciseSvc: exerciseSvc,
+		}, func() {}, nil
 	}
 
 	logger.Info("storage", "mode", "postgres")
 	if err := db.Migrate(dsn); err != nil {
-		return nil, nil, nil, err
+		return deps{}, nil, err
 	}
 	pool, err := db.NewPool(ctx, dsn)
 	if err != nil {
-		return nil, nil, nil, err
+		return deps{}, nil, err
 	}
-	return plan.NewPostgresRepository(pool),
-		workout.NewPostgresRepository(pool),
-		pool.Close, nil
+
+	exerciseRepo := exercise.NewPostgresRepository(pool)
+	if inserted, err := exercise.SeedIfEmpty(ctx, exerciseRepo, exercise.Seed()); err != nil {
+		pool.Close()
+		return deps{}, nil, err
+	} else if inserted > 0 {
+		logger.Info("seeded exercise library", "rows", inserted)
+	}
+	exerciseSvc := exercise.NewService(exerciseRepo)
+	if err := exerciseSvc.LoadSnapshot(ctx); err != nil {
+		pool.Close()
+		return deps{}, nil, err
+	}
+
+	return deps{
+		planRepo:    plan.NewPostgresRepository(pool),
+		workoutRepo: workout.NewPostgresRepository(pool),
+		exerciseSvc: exerciseSvc,
+	}, pool.Close, nil
 }
 
 func getenv(key, fallback string) string {

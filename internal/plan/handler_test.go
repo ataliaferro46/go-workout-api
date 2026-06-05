@@ -16,7 +16,9 @@ import (
 // to the engine — so InMemoryRepository is fine here.
 func newPlanServer() *http.ServeMux {
 	mux := http.NewServeMux()
-	svc := NewService(exercise.Library(), NewInMemoryRepository(), nil, nil)
+	// Static fixture for tests — admin edits don't matter here.
+	lib := exercise.Library()
+	svc := NewService(func() []domain.Exercise { return lib }, NewInMemoryRepository(), nil, nil)
 	NewHandler(svc).Routes(mux)
 	return mux
 }
