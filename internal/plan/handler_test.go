@@ -13,12 +13,13 @@ import (
 
 // newPlanServer wires a Handler over an in-memory Service for tests. Tests
 // don't need persistence semantics — they need the handler to call through
-// to the engine — so InMemoryRepository is fine here.
+// to the engine — so InMemoryRepository is fine here. nil RecoverySource
+// disables recovery-aware generation; tests that exercise it pass a stub.
 func newPlanServer() *http.ServeMux {
 	mux := http.NewServeMux()
 	// Static fixture for tests — admin edits don't matter here.
 	lib := exercise.Library()
-	svc := NewService(func() []domain.Exercise { return lib }, NewInMemoryRepository(), nil, nil)
+	svc := NewService(func() []domain.Exercise { return lib }, NewInMemoryRepository(), nil, nil, nil)
 	NewHandler(svc).Routes(mux)
 	return mux
 }

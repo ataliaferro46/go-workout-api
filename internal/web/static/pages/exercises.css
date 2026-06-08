@@ -1,0 +1,120 @@
+/* pages/exercises.css — library browser. */
+
+.page-head {
+  padding: 48px 0 24px;
+  max-width: 720px;
+}
+.page-head .eyebrow { margin-bottom: 16px; }
+.page-head h2 { margin: 12px 0; }
+
+.controls {
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.filter-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  min-width: 56px;
+}
+.filter-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex: 1;
+}
+.chip {
+  padding: 5px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+.chip:hover {
+  border-color: var(--border-hover);
+  color: var(--text);
+}
+.chip.active {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.results-meta {
+  margin: 24px 0 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.exercises-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin-bottom: 40px;
+}
+.exercise-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  transition: var(--transition-fast);
+  animation: fadeIn 0.25s ease-out backwards;
+}
+.exercise-card:hover { border-color: var(--border-hover); transform: translateY(-1px); }
+.exercise-card .x-name {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 8px;
+  letter-spacing: -0.01em;
+}
+.exercise-card .x-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.exercise-card .x-tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 100px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+.exercise-card .x-tag.compound {
+  color: var(--accent);
+  border-color: rgba(167,139,250,0.25);
+  background: var(--accent-glow);
+}
+.exercise-card .x-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.exercise-card .x-meta strong { color: var(--text-dim); font-weight: 500; }
+
+@media (max-width: 640px) {
+  .filter-row { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .filter-label { min-width: 0; }
+}

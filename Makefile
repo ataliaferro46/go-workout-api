@@ -33,7 +33,7 @@ test-integration:
 	@docker exec workout-postgres psql -U workout -d workout \
 		-tAc "SELECT 1 FROM pg_database WHERE datname='workout_test'" | grep -q 1 || \
 		docker exec workout-postgres createdb -U workout workout_test
-	TEST_DATABASE_URL=$(TEST_DATABASE_URL) go test -race -tags=integration ./internal/workout/... ./internal/plan/... ./internal/exercise/...
+	TEST_DATABASE_URL=$(TEST_DATABASE_URL) go test -race -tags=integration ./internal/workout/... ./internal/plan/... ./internal/exercise/... ./internal/biometrics/...
 
 # Tests plus a coverage summary.
 cover:

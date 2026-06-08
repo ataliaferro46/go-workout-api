@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Exercises · workout.api</title>
+<meta name="description" content="The 94-movement library: search and filter by pattern, primary muscle, or equipment.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/pages/exercises.css">
+<script src="/shared/shared.js" defer></script>
+<script src="/pages/exercises.js" defer></script>
+</head>
+<body>
+<div id="site-header"></div>
+
+<main class="container">
+  <section class="page-head">
+    <span class="eyebrow">library</span>
+    <h2>Exercises</h2>
+    <p class="lede">The seed library backing the generation engine. Each entry is a row in Postgres, edited via the admin endpoints.</p>
+  </section>
+
+  <section class="card padded controls">
+    <div class="field">
+      <input type="search" id="search" class="input" placeholder="Search by name…" autocomplete="off">
+    </div>
+
+    <div class="filter-row">
+      <span class="filter-label">Pattern</span>
+      <div class="filter-chips" id="filter-pattern">
+        <button class="chip active" data-value="">All</button>
+      </div>
+    </div>
+    <div class="filter-row">
+      <span class="filter-label">Muscle</span>
+      <div class="filter-chips" id="filter-muscle">
+        <button class="chip active" data-value="">All</button>
+      </div>
+    </div>
+    <div class="filter-row">
+      <span class="filter-label">Level</span>
+      <div class="filter-chips" id="filter-level">
+        <button class="chip active" data-value="">All</button>
+        <button class="chip" data-value="beginner">Beginner</button>
+        <button class="chip" data-value="intermediate">Intermediate</button>
+        <button class="chip" data-value="advanced">Advanced</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="results-meta">
+    <span id="count" class="meta-pill">loading…</span>
+  </section>
+
+  <section id="grid" class="exercises-grid"></section>
+  <div class="empty" id="empty" style="display: none;">
+    <div class="icon">∅</div>
+    <h3>No exercises match</h3>
+    <p>Loosen one of the filters above.</p>
+  </div>
+
+  <div class="callout callout-error hidden" id="error"></div>
+</main>
+
+<div id="site-footer"></div>
+</body>
+</html>

@@ -1,0 +1,130 @@
+/* pages/plans.css — saved plans history. */
+
+.page-head {
+  padding: 48px 0 24px;
+  max-width: 720px;
+}
+.page-head .eyebrow { margin-bottom: 16px; }
+.page-head h2 { margin: 12px 0; }
+.page-head-meta {
+  margin-top: 16px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.page-head-meta .btn { padding: 8px 16px; font-size: 13px; }
+
+#plans-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 40px;
+}
+
+.plan-row {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color var(--transition-fast);
+  animation: fadeIn 0.25s ease-out backwards;
+}
+.plan-row:hover { border-color: var(--border-hover); }
+.plan-row.expanded { border-color: var(--accent); }
+
+.plan-row-head {
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  gap: 12px;
+}
+.plan-row-left {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.plan-title {
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+.plan-sub {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.plan-sub .meta-pill { font-size: 11px; padding: 2px 8px; }
+.plan-sub .when {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.plan-row-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.chevron {
+  font-family: var(--font-mono);
+  color: var(--text-faint);
+  transition: transform var(--transition-fast);
+}
+.plan-row.expanded .chevron { transform: rotate(90deg); color: var(--accent); }
+
+.plan-body {
+  display: none;
+  border-top: 1px solid var(--border);
+  padding: 16px 20px 20px;
+}
+.plan-row.expanded .plan-body { display: block; animation: fadeIn 0.25s ease-out; }
+.plan-days {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+.plan-day-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+}
+.plan-day-card .pd-name {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 8px;
+  letter-spacing: -0.01em;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+.plan-day-card .pd-ex {
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--border);
+  font-size: 12px;
+}
+.plan-day-card .pd-ex:last-child { border-bottom: none; }
+.plan-day-card .pd-ex-name { margin-bottom: 2px; }
+.plan-day-card .pd-ex-dose {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.plan-actions {
+  margin-top: 16px;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.plan-actions .btn { padding: 8px 14px; font-size: 12px; }
+.btn-danger {
+  background: transparent;
+  color: var(--error);
+  border: 1px solid rgba(248,113,113,0.3);
+}
+.btn-danger:hover { background: rgba(248,113,113,0.08); border-color: var(--error); }

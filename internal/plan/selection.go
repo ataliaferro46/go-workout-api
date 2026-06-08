@@ -49,8 +49,9 @@ func exerciseCount(sessionMinutes int, exp domain.ExperienceLevel) int {
 // satisfies the day's priority movement patterns in order, then fills any
 // remaining slots with movements that hit the day's target muscles. The used
 // map (exercise ID -> times already placed in the plan) is updated in place so
-// later days favor variety.
-func selectForDay(tmpl dayTemplate, pool []domain.Exercise, count int, used map[string]int, rng *rand.Rand) []domain.Exercise {
+// later days favor variety. recoveryAdjustment is subtracted from compound
+// scores per ADR-051 (low recovery deprioritizes high-intensity movements).
+func selectForDay(tmpl dayTemplate, pool []domain.Exercise, count int, used map[string]int, rng *rand.Rand, recoveryAdjustment float64) []domain.Exercise {
 	dayMuscles := toMuscleSet(tmpl.Muscles)
 	chosen := make([]domain.Exercise, 0, count)
 	chosenIDs := map[string]bool{}
@@ -60,7 +61,7 @@ func selectForDay(tmpl dayTemplate, pool []domain.Exercise, count int, used map[
 		if len(chosen) >= count {
 			break
 		}
-		if ex, ok := bestMatch(pool, pat, dayMuscles, chosenIDs, used, rng); ok {
+		if ex, ok := bestMatch(pool, pat, dayMuscles, chosenIDs, used, rng, recoveryAdjustment); ok {
 			chosen = append(chosen, ex)
 			chosenIDs[ex.ID] = true
 			used[ex.ID]++
@@ -70,7 +71,7 @@ func selectForDay(tmpl dayTemplate, pool []domain.Exercise, count int, used map[
 	// Second pass: fill remaining slots with anything that hits the day's
 	// muscles. An empty pattern means "any pattern".
 	for len(chosen) < count {
-		ex, ok := bestMatch(pool, "", dayMuscles, chosenIDs, used, rng)
+		ex, ok := bestMatch(pool, "", dayMuscles, chosenIDs, used, rng, recoveryAdjustment)
 		if !ok {
 			break
 		}
@@ -91,6 +92,7 @@ func bestMatch(
 	chosenIDs map[string]bool,
 	used map[string]int,
 	rng *rand.Rand,
+	recoveryAdjustment float64,
 ) (domain.Exercise, bool) {
 	type scored struct {
 		ex    domain.Exercise
@@ -107,7 +109,7 @@ func bestMatch(
 		if !ex.TargetsAny(dayMuscles) {
 			continue
 		}
-		cands = append(cands, scored{ex: ex, score: scoreExercise(ex, dayMuscles, used, rng)})
+		cands = append(cands, scored{ex: ex, score: scoreExercise(ex, dayMuscles, used, rng, recoveryAdjustment)})
 	}
 	if len(cands) == 0 {
 		return domain.Exercise{}, false
@@ -123,11 +125,13 @@ func bestMatch(
 
 // scoreExercise ranks a candidate: compounds and primary-muscle matches score
 // higher, repeated use across the plan is penalized for variety, and a small
-// seeded jitter breaks near-ties differently per seed.
-func scoreExercise(ex domain.Exercise, dayMuscles map[domain.MuscleGroup]bool, used map[string]int, rng *rand.Rand) float64 {
+// seeded jitter breaks near-ties differently per seed. recoveryAdjustment is
+// subtracted from the compound bonus; with low recovery a compound is still
+// viable but its margin over an isolation movement narrows or inverts.
+func scoreExercise(ex domain.Exercise, dayMuscles map[domain.MuscleGroup]bool, used map[string]int, rng *rand.Rand, recoveryAdjustment float64) float64 {
 	score := 0.0
 	if ex.Compound {
-		score += 3.0
+		score += 3.0 - recoveryAdjustment
 	}
 	if dayMuscles[ex.PrimaryMuscle] {
 		score += 2.0

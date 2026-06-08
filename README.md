@@ -104,6 +104,14 @@ Migrations are embedded in the binary (`internal/db/migrations/*.sql` via `embed
 ADMIN_API_KEY=$(openssl rand -hex 32) make run    # or run-pg
 ```
 
+`BIOMETRICS_MASTER_KEY` enables the biometrics features (Whoop / Oura integrations, recovery-aware plan generation). When set (≥32 bytes), it is the master key from which AES-GCM keys are derived via HKDF to encrypt OAuth tokens at rest. When unset, biometrics is silently disabled — every other feature works fine. Provider-specific env vars (`WHOOP_CLIENT_ID` / `_SECRET` / `_REDIRECT_URI` / `_WEBHOOK_SECRET`, same for Oura) determine which real providers are registered; the `mock` provider is always registered so the OAuth + sync flow can be exercised without third-party credentials.
+
+```bash
+export BIOMETRICS_MASTER_KEY=$(openssl rand -hex 32)
+export MOCK_WEBHOOK_SECRET="dev-mock-secret"
+make run-pg
+```
+
 Generate a plan (now persists; the response includes the assigned `id`):
 
 ```bash
@@ -165,6 +173,13 @@ curl -s -X POST localhost:8080/v1/admin/exercises \
 | POST   | `/v1/admin/exercises`             | `X-Admin-API-Key`    | `domain.Exercise` | 201     |
 | PUT    | `/v1/admin/exercises/{id}`        | `X-Admin-API-Key`    | `domain.Exercise` | 200     |
 | DELETE | `/v1/admin/exercises/{id}`        | `X-Admin-API-Key`    | —                 | 204     |
+| GET    | `/v1/biometrics/connect/{provider}` | `X-User-ID`        | —                 | 200     |
+| DELETE | `/v1/biometrics/connect/{provider}` | `X-User-ID`        | —                 | 204     |
+| GET    | `/v1/biometrics/oauth/{provider}/callback` | —             | (query: state, code) | 200 |
+| GET    | `/v1/biometrics/latest`           | `X-User-ID`          | —                 | 200     |
+| POST   | `/v1/biometrics/webhooks/{provider}` | HMAC sig          | provider event    | 200     |
+
+Recovery-aware plan generation: append `?recovery_aware=true` to `POST /v1/plans/generate` to opt in. When the user has a recent recovery reading (Whoop or Oura readiness), the engine biases scoring away from high-intensity compounds and emits a warning explaining the adjustment.
 
 `POST /v1/plans/generate` accepts an optional `?seed=<int>` for reproducible output. Errors use a stable envelope so clients branch on `code`, not the message:
 

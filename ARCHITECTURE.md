@@ -899,6 +899,147 @@ declaration site" is worth it.
 
 ---
 
+## Biometric integrations (Whoop / Oura)
+
+### ADR-047: Provider-shaped interface for third-party biometric integrations
+
+**Context.** Whoop and Oura both expose OAuth-protected APIs that return broadly
+similar wearable data (recovery, sleep, strain), but their endpoint shapes and field
+names differ. A future Apple Health or Garmin integration would add a third variant.
+
+**Decision.** Define a single `Provider` interface — Name, AuthURL, ExchangeCode,
+Refresh, LatestSince, VerifyWebhook — and implement it once per integration
+(`WhoopProvider`, `OuraProvider`, `MockProvider`). A `Registry` maps provider names
+to implementations and is the only place the rest of the codebase talks to.
+
+**Why.** The same Repository pattern applied to external APIs. Adding a new provider
+is one new file; the service, handler, and polling daemon never change. Tests use
+`MockProvider` to exercise the full OAuth + sync + webhook plumbing without external
+calls.
+
+**Trade-offs.** The interface is the lowest common denominator — provider-specific
+features (Whoop's strain metric, Oura's HRV) require either escape hatches on the
+interface or per-provider methods on the Service. Acceptable today; the metrics we
+consume all map cleanly to `domain.Kind`.
+
+### ADR-048: OAuth tokens encrypted at rest with AES-GCM + HKDF-derived keys
+
+**Context.** OAuth refresh tokens are long-lived bearer credentials — leaking one
+gives an attacker durable access to a user's health data. Plaintext storage is
+unacceptable.
+
+**Decision.** `TokenStore` encrypts both access and refresh tokens with AES-GCM
+before they hit the underlying repository. The 32-byte AES key is derived from the
+operator-supplied `BIOMETRICS_MASTER_KEY` env var via HKDF-SHA256 with a per-purpose
+info string (`"biometrics-token-v1"`). Per-row random nonce. Field-name AAD binds
+each ciphertext to its slot (access vs refresh) so an attacker cannot swap them
+without detection.
+
+**Why.** AES-GCM is the standard authenticated encryption primitive — confidentiality
+and integrity in one operation. HKDF is the standard key-derivation step; the
+per-purpose info string means a future "biometrics-cookie-v1" purpose can derive a
+distinct key from the same master without leaking either. Random per-row nonces avoid
+the catastrophic GCM-with-reused-nonce failure mode. The field-name AAD is
+defense-in-depth against an attacker with row-level write access (e.g., SQL injection
+elsewhere in the codebase).
+
+**Trade-offs.** Master key rotation is documented but not implemented in v1 — bumping
+the info string to `"biometrics-token-v2"` and lazy-rewrapping on next Save is the
+intended migration path. Lose the master key and every token must be reconnected;
+that's the right failure mode for at-rest encryption.
+
+### ADR-049: Verify-only webhooks for v1; polling is the ingestion path
+
+**Context.** The spec described webhook ingestion (Provider posts → we verify
+signature → we persist readings). Doing this fully requires per-provider webhook
+payload parsing and a `provider_user_id → user_id` link table built at OAuth time.
+
+**Decision.** v1 webhooks verify the HMAC signature and return 200 — they confirm
+"new data is available" but do not themselves persist. The polling daemon (running
+on a 15-minute tick) does the actual ingestion via `Provider.LatestSince`. Webhooks
+trigger nothing today; in v2 they would force-tick the daemon for the affected user.
+
+**Why.** Polling-as-ingestion is sufficient for the latency budget (recovery scores
+change once per day, not per second). It also reuses one code path — the same
+`IngestReadings` call works whether the trigger was a tick or a webhook. Shipping
+the polling path first lets us validate ingestion end-to-end without provider-
+specific webhook payload parsing.
+
+**Trade-offs.** Webhook receipt is a no-op; if a provider sends data and we don't
+poll for 15 minutes, freshness lags. Acceptable for recovery (daily granularity);
+would not be for a real-time metric. Documented as a v2 expansion: add
+`Provider.ParseWebhook(body) []domain.Reading` and call `Service.IngestReadings`
+from the webhook handler. One method, no architectural rework.
+
+### ADR-050: Idempotency on every reading via `(provider, idempotency_key)`
+
+**Context.** Webhooks retry on non-2xx. Polling re-fetches a window that overlaps
+the last sync. Either path will, eventually, attempt to insert the same logical
+reading twice.
+
+**Decision.** Every `domain.Reading` carries an `IdempotencyKey` (typically
+`provider:kind:provider_event_id`). The `biometric_readings` table has a UNIQUE
+constraint on `(provider, idempotency_key)`. Insert uses `ON CONFLICT DO NOTHING` —
+duplicates are silent no-ops, not errors. The in-memory repository enforces the same
+invariant via a dedup set.
+
+**Why.** Idempotency at the storage boundary means every layer above can be naive
+about retries. Webhook handlers, polling daemons, future replay tools — all of them
+get correctness for free. The alternative (de-duping in application code) requires
+every ingestion path to be careful and is a recurring source of subtle bugs.
+
+**Trade-offs.** One extra column and one constraint per row; trivial. The first
+write wins, so if a provider sends a correction with the same idempotency key, we
+ignore it. That's the right call for our shape of data (recovery scores don't get
+corrected after the fact); for a domain where corrections are real, the policy
+would flip to "last write wins" via `ON CONFLICT DO UPDATE`.
+
+### ADR-051: Recovery as a *score adjustment*, not a hard filter
+
+**Context.** When the user has low recovery, the engine should bias away from
+high-intensity compound lifts. The implementation could be a hard filter (drop all
+compounds below some threshold) or a soft adjustment (shave the compound bonus).
+
+**Decision.** Soft adjustment in `scoreExercise`. Low recovery (<0.33) subtracts
+1.5 from the compound score; medium (0.33–0.66) subtracts 0.5; high (≥0.66) is
+unchanged. The engine emits a warning whenever the adjustment fires so the user
+sees what changed and why.
+
+**Why.** Hard filtering would over-paternalize — an advanced lifter with low
+recovery might still want their squat, even if at reduced volume. The soft
+adjustment narrows the score margin between compounds and isolation movements,
+letting the rest of the scoring system (variety, primary-muscle match) push toward
+the right movement without veto-power over compounds. Users opt in via
+`?recovery_aware=true`; the default is off so existing clients are unaffected.
+
+**Trade-offs.** The adjustment thresholds and magnitudes are tunable constants —
+future personalization would promote them to per-user `Weights`. Same pattern as
+the existing scoring constants; the precedent is already in the codebase.
+
+### ADR-052: Single-process polling daemon with bounded concurrency
+
+**Context.** With N connected users, polling every (user, provider) pair serially
+takes O(N × provider latency); doing them all in parallel hits provider rate limits
+and burns goroutines.
+
+**Decision.** A single goroutine in main (`go d.Run(ctx)`) ticks every 15 minutes.
+Each tick lists all (user, provider) pairs and fans them out across a semaphore-
+bounded pool (default 8 in-flight). Per-user errors are logged but do not stop
+sibling syncs; the next tick retries.
+
+**Why.** Adequate for single-process deployments — the codebase is one binary
+today. Bounded concurrency is the textbook trade-off between throughput and
+provider-side rate-limit safety. The semaphore is a buffered channel of empty
+structs, the simplest Go expression of "permit-based concurrency."
+
+**Trade-offs.** Multi-replica deploys would have N instances each ticking
+independently — wasteful, and at the limit, hits providers harder than intended.
+The migration path is a real job system (River, asynq, NATS JetStream) where one
+worker holds the per-tick lease via Redis/Postgres advisory locks. Documented as
+the trigger for that work: when a second replica is deployed.
+
+---
+
 ## Deferred / planned
 
 Decisions not yet made because the surface that requires them doesn't exist yet. Listed

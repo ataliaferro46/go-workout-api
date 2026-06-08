@@ -8,6 +8,11 @@ type GenerateRequest struct {
 	SessionMinutes     int             `json:"session_minutes"`
 	AvailableEquipment []Equipment     `json:"available_equipment"`
 	Injuries           []BodyPart      `json:"injuries,omitempty"`
+	// RecoveryHint, when set, biases generation toward less-taxing variants.
+	// 1.0 = fully recovered (no adjustment); 0.0 = no recovery (largest
+	// adjustment). Populated by plan.Service when a recovery-aware request
+	// has a fresh-enough biometric reading; never set directly by clients.
+	RecoveryHint *float64 `json:"recovery_hint,omitempty"`
 }
 
 // Bounds on request fields, exported so callers and tests can reference them.

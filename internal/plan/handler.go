@@ -56,7 +56,12 @@ func (h *Handler) generate(w http.ResponseWriter, r *http.Request) {
 		seed = parsed
 	}
 
-	out, err := h.svc.Create(r.Context(), userID, req, seed)
+	// ?recovery_aware=true opts in to recovery-biased generation. Default
+	// is off so the endpoint stays predictable for clients that don't yet
+	// integrate biometrics.
+	recoveryAware := r.URL.Query().Get("recovery_aware") == "true"
+
+	out, err := h.svc.Create(r.Context(), userID, req, seed, recoveryAware)
 	if err != nil {
 		httpx.Error(w, err)
 		return

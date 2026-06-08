@@ -29,6 +29,26 @@ func NewGenerator(library []domain.Exercise, seed int64) *Generator {
 	}
 }
 
+// recoveryAdjustmentFor maps a normalized recovery score (0.0–1.0) into a
+// compound-score penalty per ADR-051. Fully recovered (≥0.66) means no
+// adjustment; medium (0.33–0.66) shaves the compound bonus; low (<0.33)
+// shaves it harder, biasing selection toward easier variants. Returns the
+// penalty plus a human-readable warning the caller can attach to the plan.
+func recoveryAdjustmentFor(recovery *float64) (float64, string) {
+	if recovery == nil {
+		return 0, ""
+	}
+	pct := int(*recovery*100 + 0.5)
+	switch {
+	case *recovery < 0.33:
+		return 1.5, fmt.Sprintf("recovery low (%d%%); biased toward easier variants", pct)
+	case *recovery < 0.66:
+		return 0.5, fmt.Sprintf("recovery medium (%d%%); biased toward easier variants", pct)
+	default:
+		return 0, ""
+	}
+}
+
 // Generate validates the request and returns a workout plan, or a
 // *domain.ValidationError if the request is invalid or no exercises fit the
 // constraints.
@@ -46,6 +66,7 @@ func (g *Generator) Generate(req domain.GenerateRequest) (domain.WorkoutPlan, er
 
 	split := chooseSplit(req.DaysPerWeek)
 	count := exerciseCount(req.SessionMinutesOrDefault(), req.Experience)
+	recoveryAdjustment, recoveryWarning := recoveryAdjustmentFor(req.RecoveryHint)
 
 	used := make(map[string]int)
 	plan := domain.WorkoutPlan{
@@ -55,9 +76,12 @@ func (g *Generator) Generate(req domain.GenerateRequest) (domain.WorkoutPlan, er
 		Split:       split.Name,
 		Days:        make([]domain.PlanDay, 0, len(split.Days)),
 	}
+	if recoveryWarning != "" {
+		plan.Warnings = append(plan.Warnings, recoveryWarning)
+	}
 
 	for i, tmpl := range split.Days {
-		exercises := selectForDay(tmpl, pool, count, used, g.rng)
+		exercises := selectForDay(tmpl, pool, count, used, g.rng, recoveryAdjustment)
 
 		day := domain.PlanDay{
 			Index:     i + 1,

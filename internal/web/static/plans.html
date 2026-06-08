@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Plans · workout.api</title>
+<meta name="description" content="Your saved training plans, persisted in Postgres.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/pages/plans.css">
+<script src="/shared/shared.js" defer></script>
+<script src="/pages/plans.js" defer></script>
+</head>
+<body>
+<div id="site-header"></div>
+
+<main class="container">
+  <section class="page-head">
+    <span class="eyebrow">history</span>
+    <h2>Your plans</h2>
+    <p class="lede">
+      Every plan you generate is persisted to Postgres tied to your browser-local user id. Click one to expand.
+    </p>
+    <div class="page-head-meta">
+      <span id="user-pill" class="meta-pill">user: …</span>
+      <a href="/" class="btn btn-secondary">+ generate new</a>
+    </div>
+  </section>
+
+  <section id="plans-list"></section>
+
+  <div class="empty" id="empty" style="display: none;">
+    <div class="icon">∅</div>
+    <h3>No plans yet</h3>
+    <p>Generate one and it'll show up here.</p>
+  </div>
+
+  <div class="callout callout-error hidden" id="error"></div>
+</main>
+
+<div id="site-footer"></div>
+</body>
+</html>

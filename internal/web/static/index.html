@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>workout.api — a constraint-based training engine</title>
+<meta name="description" content="A Go backend that generates structured training programs and adapts them to your recovery state. Try the engine.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/pages/home.css">
+<script src="/shared/shared.js" defer></script>
+<script src="/pages/home.js" defer></script>
+</head>
+<body>
+<div id="site-header"></div>
+
+<main class="container">
+  <section class="hero">
+    <span class="eyebrow">live demo</span>
+    <h1>A training engine, <span class="accent">written in Go</span>.</h1>
+    <p class="lede">
+      Constraint-and-coverage algorithm picks exercises for your goal, equipment, and injuries — then biases the program when you're under-recovered. No CRUD, no LLM, just real code.
+    </p>
+    <div class="hero-meta">
+      <span>94 movements</span>
+      <span>·</span>
+      <span>4 migrations</span>
+      <span>·</span>
+      <span>53 ADRs</span>
+    </div>
+  </section>
+
+  <section class="card padded form-card">
+    <form id="plan-form">
+      <div class="form-grid">
+
+        <div class="field full">
+          <label>Goal</label>
+          <div class="choices">
+            <label class="choice"><input type="radio" name="goal" value="fat_loss"><span>Fat Loss</span></label>
+            <label class="choice"><input type="radio" name="goal" value="muscle_gain" checked><span>Muscle Gain</span></label>
+            <label class="choice"><input type="radio" name="goal" value="strength"><span>Strength</span></label>
+            <label class="choice"><input type="radio" name="goal" value="endurance"><span>Endurance</span></label>
+            <label class="choice"><input type="radio" name="goal" value="general_fitness"><span>General</span></label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Experience</label>
+          <div class="choices">
+            <label class="choice"><input type="radio" name="experience" value="beginner"><span>Beginner</span></label>
+            <label class="choice"><input type="radio" name="experience" value="intermediate" checked><span>Intermediate</span></label>
+            <label class="choice"><input type="radio" name="experience" value="advanced"><span>Advanced</span></label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Days / week <span class="hint" id="days-hint">4 days</span></label>
+          <div class="slider-row">
+            <input type="range" id="days" name="days_per_week" min="2" max="6" value="4">
+            <span class="slider-value" id="days-val">4</span>
+          </div>
+        </div>
+
+        <div class="field full">
+          <label>Equipment available</label>
+          <div class="choices">
+            <label class="choice"><input type="checkbox" name="equipment" value="barbell" checked><span>Barbell</span></label>
+            <label class="choice"><input type="checkbox" name="equipment" value="dumbbell" checked><span>Dumbbell</span></label>
+            <label class="choice"><input type="checkbox" name="equipment" value="cable" checked><span>Cable</span></label>
+            <label class="choice"><input type="checkbox" name="equipment" value="machine"><span>Machine</span></label>
+            <label class="choice"><input type="checkbox" name="equipment" value="kettlebell"><span>Kettlebell</span></label>
+            <label class="choice"><input type="checkbox" name="equipment" value="bands"><span>Bands</span></label>
+            <label class="choice"><input type="checkbox" name="equipment" value="pullup_bar" checked><span>Pull-up Bar</span></label>
+            <label class="choice"><input type="checkbox" name="equipment" value="bench" checked><span>Bench</span></label>
+          </div>
+        </div>
+
+        <div class="field full">
+          <label>Working around injuries</label>
+          <div class="choices">
+            <label class="choice"><input type="checkbox" name="injuries" value="lower_back"><span>Lower Back</span></label>
+            <label class="choice"><input type="checkbox" name="injuries" value="knee"><span>Knee</span></label>
+            <label class="choice"><input type="checkbox" name="injuries" value="shoulder"><span>Shoulder</span></label>
+            <label class="choice"><input type="checkbox" name="injuries" value="elbow"><span>Elbow</span></label>
+            <label class="choice"><input type="checkbox" name="injuries" value="wrist"><span>Wrist</span></label>
+            <label class="choice"><input type="checkbox" name="injuries" value="hip"><span>Hip</span></label>
+            <label class="choice"><input type="checkbox" name="injuries" value="ankle"><span>Ankle</span></label>
+            <label class="choice"><input type="checkbox" name="injuries" value="neck"><span>Neck</span></label>
+          </div>
+        </div>
+
+        <div class="field full">
+          <label>Recovery <span class="hint">simulates a Whoop/Oura reading</span></label>
+          <div class="recovery-toggle">
+            <button type="button" class="recovery-btn active" data-recovery="">Off<span class="label">no bias</span></button>
+            <button type="button" class="recovery-btn" data-recovery="0.85">High<span class="label">85%</span></button>
+            <button type="button" class="recovery-btn" data-recovery="0.50">Medium<span class="label">50%</span></button>
+            <button type="button" class="recovery-btn" data-recovery="0.25">Low<span class="label">25%</span></button>
+          </div>
+        </div>
+
+      </div>
+
+      <button type="submit" class="btn btn-primary full lg" id="submit-btn" style="margin-top: 32px;">
+        <span class="btn-text">Generate Plan</span>
+        <span class="arrow">→</span>
+      </button>
+    </form>
+  </section>
+
+  <section class="result" id="result"></section>
+  <div class="callout callout-error hidden" id="error"></div>
+</main>
+
+<div id="site-footer"></div>
+</body>
+</html>
