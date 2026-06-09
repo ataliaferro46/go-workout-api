@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Sign up · workout.api</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/pages/auth.css">
+<script src="/shared/shared.js" defer></script>
+<script src="/pages/signup.js" defer></script>
+</head>
+<body class="auth-page">
+<main class="auth-shell">
+  <div class="auth-brand">
+    <div class="logo-mark">/</div>
+    <div class="logo-text"><strong>workout</strong><span class="dim">.api</span></div>
+  </div>
+
+  <h1>Create your account</h1>
+  <p class="lede auth-lede">A free, real account. We email you a verification link — clicking it logs you in.</p>
+
+  <form id="signup-form" class="card padded auth-card">
+    <div class="field">
+      <label>Email</label>
+      <input class="input" type="email" name="email" autocomplete="email" required>
+    </div>
+    <div class="field">
+      <label>Password <span class="hint">≥ 8 characters</span></label>
+      <input class="input" type="password" name="password" autocomplete="new-password" minlength="8" required>
+    </div>
+    <button type="submit" class="btn btn-primary full lg" id="submit-btn" style="margin-top: 20px;">
+      <span class="btn-text">Create account</span>
+      <span class="arrow">→</span>
+    </button>
+    <div class="callout callout-error hidden" id="error"></div>
+  </form>
+
+  <div class="callout hidden" id="success" style="background: rgba(52,211,153,0.08); border-color: rgba(52,211,153,0.25);">
+    <strong style="color: var(--success);">Check your email</strong>
+    <span>We sent a verification link to <span id="sent-to"></span>. It expires in 24 hours.</span>
+  </div>
+
+  <p class="auth-switch">
+    Already have an account? <a href="/login">Sign in →</a>
+  </p>
+</main>
+</body>
+</html>

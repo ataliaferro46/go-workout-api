@@ -30,6 +30,14 @@ var pageRoutes = map[string]string{
 	"/":          "index.html",
 	"/exercises": "exercises.html",
 	"/plans":     "plans.html",
+	"/quick":     "quick.html",
+	"/history":   "history.html",
+	"/login":     "login.html",
+	"/signup":    "signup.html",
+	"/verify":    "verify.html",
+	"/settings":  "settings.html",
+	"/privacy":   "privacy.html",
+	"/terms":     "terms.html",
 }
 
 // Handler returns an http.Handler that serves the embedded UI.
@@ -60,6 +68,12 @@ func Handler() http.Handler {
 		}
 		if file, ok := pageRoutes[clean]; ok {
 			serveFile(w, r, sub, file)
+			return
+		}
+		// Dynamic route: /workout/<id> → workout.html. The page reads the
+		// id from window.location.pathname itself.
+		if strings.HasPrefix(clean, "/workout/") {
+			serveFile(w, r, sub, "workout.html")
 			return
 		}
 

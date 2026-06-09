@@ -1,0 +1,99 @@
+/* legal.css — privacy policy & terms of service. Pure document layout;
+   the page is content-heavy and intentionally minimal. */
+
+.container.legal {
+  max-width: 760px;
+}
+
+.legal .page-head .meta-line {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-top: 4px;
+}
+
+.legal-doc {
+  margin-top: 24px;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--text);
+}
+
+.legal-doc h3 {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  margin: 32px 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.legal-doc h3:first-child {
+  margin-top: 0;
+}
+
+.legal-doc p {
+  margin: 0 0 14px;
+  color: var(--text-dim);
+}
+
+.legal-doc strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.legal-doc ul {
+  margin: 0 0 14px;
+  padding-left: 20px;
+  color: var(--text-dim);
+}
+.legal-doc li {
+  margin-bottom: 8px;
+}
+.legal-doc li::marker {
+  color: var(--text-faint);
+}
+
+.legal-doc a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 120ms ease;
+}
+.legal-doc a:hover {
+  border-bottom-color: var(--accent);
+}
+
+.legal-doc code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 1px 6px;
+  background: rgba(139, 92, 246, 0.08);
+  border-radius: 4px;
+  color: var(--text);
+}
+
+.legal-foot {
+  margin-top: 24px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-faint);
+}
+.legal-foot a {
+  color: var(--text-dim);
+  border-bottom: 1px dashed var(--border);
+  text-decoration: none;
+}
+.legal-foot a:hover {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+@media (max-width: 640px) {
+  .legal-doc {
+    font-size: 14px;
+  }
+  .legal-doc h3 {
+    font-size: 15px;
+  }
+}

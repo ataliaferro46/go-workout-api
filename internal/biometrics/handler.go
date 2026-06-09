@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/ataliaferro46/go-workout-api/internal/auth"
 	"github.com/ataliaferro46/go-workout-api/internal/domain"
 	"github.com/ataliaferro46/go-workout-api/internal/httpx"
 )
@@ -16,29 +17,49 @@ type Handler struct {
 // NewHandler constructs a Handler.
 func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 
-// Routes registers the routes on mux.
-//
-// /v1/biometrics/connect/{provider}        — start OAuth (X-User-ID)
-// /v1/biometrics/oauth/{provider}/callback — OAuth redirect target
-// /v1/biometrics/latest                    — latest reading per kind (X-User-ID)
-// /v1/biometrics/webhooks/{provider}       — webhook receiver (HMAC sig)
-// /v1/biometrics/connect/{provider}        — DELETE: disconnect (X-User-ID)
-func (h *Handler) Routes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /v1/biometrics/connect/{provider}", h.connect)
-	mux.HandleFunc("DELETE /v1/biometrics/connect/{provider}", h.disconnect)
+// Routes registers the routes on mux. Auth-required routes are wrapped in
+// requireAuth; the OAuth callback and webhook endpoints intentionally bypass
+// it — callback uses the state token for binding, webhook uses HMAC.
+func (h *Handler) Routes(mux *http.ServeMux, requireAuth func(http.Handler) http.Handler) {
+	mux.Handle("GET /v1/biometrics/providers", requireAuth(http.HandlerFunc(h.providers)))
+	mux.Handle("GET /v1/biometrics/connect/{provider}", requireAuth(http.HandlerFunc(h.connect)))
+	mux.Handle("DELETE /v1/biometrics/connect/{provider}", requireAuth(http.HandlerFunc(h.disconnect)))
+	mux.Handle("GET /v1/biometrics/latest", requireAuth(http.HandlerFunc(h.latest)))
+	mux.Handle("POST /v1/biometrics/sync/{provider}", requireAuth(http.HandlerFunc(h.syncNow)))
+
+	// Public — providers redirect/POST here without our cookie:
 	mux.HandleFunc("GET /v1/biometrics/oauth/{provider}/callback", h.callback)
-	mux.HandleFunc("GET /v1/biometrics/latest", h.latest)
 	mux.HandleFunc("POST /v1/biometrics/webhooks/{provider}", h.webhook)
 }
 
-func (h *Handler) connect(w http.ResponseWriter, r *http.Request) {
-	userID := r.Header.Get("X-User-ID")
-	if userID == "" {
-		httpx.Error(w, &domain.ValidationError{Message: "X-User-ID header is required"})
+func (h *Handler) syncNow(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.UserFromContext(r.Context())
+	provider := trimProvider(r.PathValue("provider"))
+	n, err := h.svc.SyncNow(r.Context(), u.ID, provider)
+	if err != nil {
+		httpx.Error(w, err)
 		return
 	}
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"provider":          provider,
+		"readings_ingested": n,
+	})
+}
+
+func (h *Handler) providers(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.UserFromContext(r.Context())
+	out, err := h.svc.ListProviders(r.Context(), u.ID)
+	if err != nil {
+		httpx.Error(w, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"providers": out})
+}
+
+func (h *Handler) connect(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.UserFromContext(r.Context())
 	provider := trimProvider(r.PathValue("provider"))
-	authURL, _, err := h.svc.Connect(r.Context(), userID, provider)
+	authURL, _, err := h.svc.Connect(r.Context(), u.ID, provider)
 	if err != nil {
 		httpx.Error(w, err)
 		return
@@ -47,12 +68,8 @@ func (h *Handler) connect(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) disconnect(w http.ResponseWriter, r *http.Request) {
-	userID := r.Header.Get("X-User-ID")
-	if userID == "" {
-		httpx.Error(w, &domain.ValidationError{Message: "X-User-ID header is required"})
-		return
-	}
-	if err := h.svc.Disconnect(r.Context(), userID, trimProvider(r.PathValue("provider"))); err != nil {
+	u, _ := auth.UserFromContext(r.Context())
+	if err := h.svc.Disconnect(r.Context(), u.ID, trimProvider(r.PathValue("provider"))); err != nil {
 		httpx.Error(w, err)
 		return
 	}
@@ -60,26 +77,27 @@ func (h *Handler) disconnect(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
+	provider := trimProvider(r.PathValue("provider"))
 	state := r.URL.Query().Get("state")
 	code := r.URL.Query().Get("code")
+	// The browser is following an OAuth redirect, not making an API call —
+	// failures should land on the Settings page with a flash, successes
+	// should land there with a "connected" badge. We never render raw JSON
+	// here.
 	if state == "" || code == "" {
-		httpx.Error(w, &domain.ValidationError{Message: "state and code are required"})
+		http.Redirect(w, r, "/settings?error=missing_params&provider="+provider, http.StatusFound)
 		return
 	}
 	if err := h.svc.HandleCallback(r.Context(), state, code); err != nil {
-		httpx.Error(w, err)
+		http.Redirect(w, r, "/settings?error=callback_failed&provider="+provider, http.StatusFound)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, map[string]string{"status": "connected"})
+	http.Redirect(w, r, "/settings?connected="+provider, http.StatusFound)
 }
 
 func (h *Handler) latest(w http.ResponseWriter, r *http.Request) {
-	userID := r.Header.Get("X-User-ID")
-	if userID == "" {
-		httpx.Error(w, &domain.ValidationError{Message: "X-User-ID header is required"})
-		return
-	}
-	out, err := h.svc.LatestForUser(r.Context(), userID)
+	u, _ := auth.UserFromContext(r.Context())
+	out, err := h.svc.LatestForUser(r.Context(), u.ID)
 	if err != nil {
 		httpx.Error(w, err)
 		return
@@ -87,19 +105,12 @@ func (h *Handler) latest(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]any{"readings": out})
 }
 
-// webhook verifies the HMAC signature and returns 200. Actual ingestion is
-// done by the polling daemon; the webhook acts as a freshness signal so
-// providers don't keep retrying. See ADR-049 — this is an intentional
-// simplification for v1; full webhook ingestion is one Provider method
-// (ParseWebhook) and one Service call away.
 func (h *Handler) webhook(w http.ResponseWriter, r *http.Request) {
 	provider, err := h.svc.registry.Lookup(trimProvider(r.PathValue("provider")))
 	if err != nil {
 		httpx.Error(w, err)
 		return
 	}
-	// Cap body size before reading — webhook payloads are small and
-	// unbounded reads are a DoS vector.
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<16))
 	if err != nil {
 		httpx.Error(w, &domain.ValidationError{Message: "request body too large"})

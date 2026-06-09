@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Quick workout · workout.api</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/pages/home.css">
+<script src="/shared/shared.js" defer></script>
+<script src="/pages/quick.js" defer></script>
+</head>
+<body>
+<div id="site-header"></div>
+
+<main class="container">
+  <section class="page-head">
+    <span class="eyebrow">today's session</span>
+    <h2>Quick workout</h2>
+    <p class="lede">Pick the muscle groups you want to hit (or switch to cardio). The engine builds a single day for you, no weekly plan needed.</p>
+  </section>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" data-mode="strength">Strength</button>
+    <button class="mode-tab" data-mode="cardio">Cardio</button>
+  </div>
+
+  <section class="card padded form-card" id="cardio-card" style="display:none">
+    <form id="cardio-form">
+      <div class="form-grid">
+        <div class="field full">
+          <label>Activity</label>
+          <div class="choices">
+            <label class="choice"><input type="radio" name="activity" value="running" checked><span>Running</span></label>
+            <label class="choice"><input type="radio" name="activity" value="cycling"><span>Cycling</span></label>
+            <label class="choice"><input type="radio" name="activity" value="walking"><span>Walking</span></label>
+            <label class="choice"><input type="radio" name="activity" value="rowing"><span>Rowing</span></label>
+            <label class="choice"><input type="radio" name="activity" value="swimming"><span>Swimming</span></label>
+            <label class="choice"><input type="radio" name="activity" value="hiit"><span>HIIT</span></label>
+            <label class="choice"><input type="radio" name="activity" value="elliptical"><span>Elliptical</span></label>
+            <label class="choice"><input type="radio" name="activity" value="other"><span>Other</span></label>
+          </div>
+        </div>
+        <div class="field">
+          <label>Intensity</label>
+          <div class="choices">
+            <label class="choice"><input type="radio" name="intensity" value="light"><span>Light</span></label>
+            <label class="choice"><input type="radio" name="intensity" value="moderate" checked><span>Moderate</span></label>
+            <label class="choice"><input type="radio" name="intensity" value="vigorous"><span>Vigorous</span></label>
+          </div>
+        </div>
+        <div class="field">
+          <label>Duration (min) <span class="hint" id="cardio-dur-hint">30</span></label>
+          <div class="slider-row">
+            <input type="range" id="cardio-duration" name="duration_minutes" min="5" max="180" step="5" value="30">
+            <span class="slider-value" id="cardio-dur-val">30</span>
+          </div>
+        </div>
+        <div class="field full">
+          <label>Distance (km, optional)</label>
+          <input class="input" type="number" name="distance_km" min="0" step="0.1" placeholder="optional">
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary full lg" id="cardio-submit-btn" style="margin-top: 32px;">
+        <span class="btn-text">Log cardio →</span>
+      </button>
+      <p id="cardio-cal-hint" class="form-help"></p>
+    </form>
+  </section>
+
+  <section class="card padded form-card" id="strength-card">
+    <form id="quick-form">
+      <div class="form-grid">
+
+        <div class="field full">
+          <label>Muscle groups</label>
+          <div class="choices">
+            <label class="choice"><input type="checkbox" name="muscles" value="chest"><span>Chest</span></label>
+            <label class="choice"><input type="checkbox" name="muscles" value="back"><span>Back</span></label>
+            <label class="choice"><input type="checkbox" name="muscles" value="shoulders"><span>Shoulders</span></label>
+            <label class="choice"><input type="checkbox" name="muscles" value="biceps"><span>Biceps</span></label>
+            <label class="choice"><input type="checkbox" name="muscles" value="triceps"><span>Triceps</span></label>
+            <label class="choice"><input type="checkbox" name="muscles" value="quads"><span>Quads</span></label>
+            <label class="choice"><input type="checkbox" name="muscles" value="hamstrings"><span>Hamstrings</span></label>
+            <label class="choice"><input type="checkbox" name="muscles" value="glutes"><span>Glutes</span></label>
+            <label class="choice"><input type="checkbox" name="muscles" value="calves"><span>Calves</span></label>
+            <label class="choice"><input type="checkbox" name="muscles" value="core"><span>Core</span></label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Goal</label>
+          <div class="choices">
+            <label class="choice"><input type="radio" name="goal" value="muscle_gain" checked><span>Muscle Gain</span></label>
+            <label class="choice"><input type="radio" name="goal" value="strength"><span>Strength</span></label>
+            <label class="choice"><input type="radio" name="goal" value="fat_loss"><span>Fat Loss</span></label>
+            <label class="choice"><input type="radio" name="goal" value="general_fitness"><span>General</span></label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Experience</label>
+          <div class="choices">
+            <label class="choice"><input type="radio" name="experience" value="beginner"><span>Beginner</span></label>
+            <label class="choice"><input type="radio" name="experience" value="intermediate" checked><span>Intermediate</span></label>
+            <label class="choice"><input type="radio" name="experience" value="advanced"><span>Advanced</span></label>
+          </div>
+        </div>
+
+        <div class="field full">
+          <label>Equipment available</label>
+          <div class="choices">
+            <label class="choice"><input type="checkbox" name="equipment" value="barbell" checked><span>Barbell</span></label>
+            <label class="choice"><input type="checkbox" name="equipment" value="dumbbell" checked><span>Dumbbell</span></label>
+            <label class="choice"><input type="checkbox" name="equipment" value="cable" checked><span>Cable</span></label>
+            <label class="choice"><input type="checkbox" name="equipment" value="machine"><span>Machine</span></label>
+            <label class="choice"><input type="checkbox" name="equipment" value="kettlebell"><span>Kettlebell</span></label>
+            <label class="choice"><input type="checkbox" name="equipment" value="bands"><span>Bands</span></label>
+            <label class="choice"><input type="checkbox" name="equipment" value="pullup_bar" checked><span>Pull-up Bar</span></label>
+            <label class="choice"><input type="checkbox" name="equipment" value="bench" checked><span>Bench</span></label>
+          </div>
+        </div>
+
+        <div class="field full">
+          <label>Working around injuries</label>
+          <div class="choices">
+            <label class="choice"><input type="checkbox" name="injuries" value="lower_back"><span>Lower Back</span></label>
+            <label class="choice"><input type="checkbox" name="injuries" value="knee"><span>Knee</span></label>
+            <label class="choice"><input type="checkbox" name="injuries" value="shoulder"><span>Shoulder</span></label>
+            <label class="choice"><input type="checkbox" name="injuries" value="elbow"><span>Elbow</span></label>
+            <label class="choice"><input type="checkbox" name="injuries" value="wrist"><span>Wrist</span></label>
+            <label class="choice"><input type="checkbox" name="injuries" value="hip"><span>Hip</span></label>
+            <label class="choice"><input type="checkbox" name="injuries" value="ankle"><span>Ankle</span></label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Session length (min) <span class="hint" id="quick-min-hint">60</span></label>
+          <div class="slider-row">
+            <input type="range" id="quick-minutes" name="session_minutes" min="20" max="120" step="10" value="60">
+            <span class="slider-value" id="quick-min-val">60</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Working sets per exercise <span class="hint" id="quick-sets-hint">auto</span></label>
+          <div class="slider-row">
+            <input type="range" id="quick-sets" name="sets_override" min="0" max="5" value="0">
+            <span class="slider-value" id="quick-sets-val">auto</span>
+          </div>
+        </div>
+
+      </div>
+
+      <button type="submit" class="btn btn-primary full lg" id="quick-submit-btn" style="margin-top: 32px;">
+        <span class="btn-text">Build & start →</span>
+      </button>
+    </form>
+  </section>
+
+  <div class="callout callout-error hidden" id="error"></div>
+</main>
+
+<div id="site-footer"></div>
+</body>
+</html>

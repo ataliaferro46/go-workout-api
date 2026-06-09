@@ -16,6 +16,18 @@ type Repository interface {
 	Get(ctx context.Context, id string) (domain.WorkoutPlan, error)
 	ListByUser(ctx context.Context, userID string) ([]domain.WorkoutPlan, error)
 	Delete(ctx context.Context, id string) error
+
+	// UpdateExercise replaces a single (plan_id, day_idx, order_idx) row's
+	// exercise + warmups while preserving sets / reps / rest. Used by the
+	// "swap exercise" flow on the plan view — the user keeps the day, the
+	// slot's volume prescription, and only the movement changes.
+	UpdateExercise(ctx context.Context, planID string, dayIdx, orderIdx int, ex domain.Exercise, warmups []domain.WarmupSet) error
+
+	// ReorderDays remaps plan_days.day_idx (and the matching plan_exercises
+	// rows) so the user can rearrange the week without regenerating. mapping
+	// is old day_idx → new day_idx; every existing day must appear as a key
+	// and the values must be a permutation of the keys.
+	ReorderDays(ctx context.Context, planID string, mapping map[int]int) error
 }
 
 // InMemoryRepository is a concurrency-safe, in-memory Repository for plans.
@@ -80,4 +92,49 @@ func (r *InMemoryRepository) Delete(ctx context.Context, id string) error {
 	}
 	delete(r.plans, id)
 	return nil
+}
+
+// ReorderDays remaps the day indices on the given plan.
+func (r *InMemoryRepository) ReorderDays(ctx context.Context, planID string, mapping map[int]int) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	p, ok := r.plans[planID]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	for i := range p.Days {
+		if newIdx, ok := mapping[p.Days[i].Index]; ok {
+			p.Days[i].Index = newIdx
+		}
+	}
+	// Sort by new index so the slice order matches.
+	sort.Slice(p.Days, func(i, j int) bool { return p.Days[i].Index < p.Days[j].Index })
+	r.plans[planID] = p
+	return nil
+}
+
+// UpdateExercise replaces the exercise + warmups at (dayIdx, orderIdx) in
+// the given plan. Sets / reps / rest are preserved.
+func (r *InMemoryRepository) UpdateExercise(ctx context.Context, planID string, dayIdx, orderIdx int, ex domain.Exercise, warmups []domain.WarmupSet) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	p, ok := r.plans[planID]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	for di, day := range p.Days {
+		if day.Index != dayIdx {
+			continue
+		}
+		for ei, pe := range day.Exercises {
+			if pe.Order != orderIdx {
+				continue
+			}
+			p.Days[di].Exercises[ei].Exercise = ex
+			p.Days[di].Exercises[ei].Warmups = warmups
+			r.plans[planID] = p
+			return nil
+		}
+	}
+	return domain.ErrNotFound
 }

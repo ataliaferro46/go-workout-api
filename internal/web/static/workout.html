@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Workout · workout.api</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/pages/workout.css">
+<script src="/shared/shared.js" defer></script>
+<script src="/pages/workout.js" defer></script>
+</head>
+<body>
+<div id="site-header"></div>
+
+<main class="container">
+  <section class="page-head">
+    <span class="eyebrow">in progress</span>
+    <h2 id="workout-name">Loading workout…</h2>
+    <p class="lede" id="workout-meta"></p>
+  </section>
+
+  <div id="workout-body"></div>
+  <div class="callout callout-error hidden" id="error"></div>
+</main>
+
+<div id="site-footer"></div>
+</body>
+</html>

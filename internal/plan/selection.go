@@ -45,52 +45,91 @@ func exerciseCount(sessionMinutes int, exp domain.ExperienceLevel) int {
 	return count
 }
 
-// selectForDay chooses up to count exercises for one training day. It first
-// satisfies the day's priority movement patterns in order, then fills any
-// remaining slots with movements that hit the day's target muscles. The used
-// map (exercise ID -> times already placed in the plan) is updated in place so
-// later days favor variety. recoveryAdjustment is subtracted from compound
-// scores per ADR-051 (low recovery deprioritizes high-intensity movements).
-func selectForDay(tmpl dayTemplate, pool []domain.Exercise, count int, used map[string]int, rng *rand.Rand, recoveryAdjustment float64) []domain.Exercise {
+// selectForDay walks the template's ordered slots and picks one exercise per
+// slot. The pattern + muscle hint on each slot is a hard preference (we
+// prefer compounds that match both, then degrade) but unmatched slots are
+// skipped rather than substituted with random fill — that's the rule the
+// old algorithm broke by chasing "best of any pattern" and inadvertently
+// stacking compounds on the same muscle group.
+//
+// Constraints enforced inside this function:
+//
+//   - At most one compound per movement Pattern per session. Prevents
+//     Bench Press + Incline Bench Press in the same Push day (same
+//     pattern → same primary muscle stimulus).
+//   - At most one isolation per primary muscle per session. Prevents
+//     three lateral raises stacking on a single Push day.
+//   - count caps the total number of exercises (templates may be longer
+//     than count when a user picks a short session, in which case the
+//     trailing isolation slots are dropped).
+//
+// `used` is the cross-plan usage counter — repeated picks of the same
+// exercise across the week are softly penalized so later days favor
+// variety. `recoveryAdjustment` is subtracted from compound scores per
+// ADR-051.
+func selectForDay(tmpl dayTemplate, pool []domain.Exercise, count int, used map[string]int, usedRegions map[domain.MuscleGroup]map[string]int, rng *rand.Rand, recoveryAdjustment float64) []domain.Exercise {
 	dayMuscles := toMuscleSet(tmpl.Muscles)
-	chosen := make([]domain.Exercise, 0, count)
+	chosen := make([]domain.Exercise, 0, len(tmpl.Slots))
 	chosenIDs := map[string]bool{}
+	compoundPatternUsed := map[domain.MovementPattern]bool{}
+	isolationMuscleUsed := map[domain.MuscleGroup]bool{}
 
-	// First pass: one exercise per priority pattern, in priority order.
-	for _, pat := range tmpl.Patterns {
-		if len(chosen) >= count {
-			break
+	record := func(ex domain.Exercise) {
+		chosenIDs[ex.ID] = true
+		used[ex.ID]++
+		if ex.Region != "" {
+			if usedRegions[ex.PrimaryMuscle] == nil {
+				usedRegions[ex.PrimaryMuscle] = map[string]int{}
+			}
+			usedRegions[ex.PrimaryMuscle][ex.Region]++
 		}
-		if ex, ok := bestMatch(pool, pat, dayMuscles, chosenIDs, used, rng, recoveryAdjustment); ok {
-			chosen = append(chosen, ex)
-			chosenIDs[ex.ID] = true
-			used[ex.ID]++
+		if ex.Compound {
+			compoundPatternUsed[ex.Pattern] = true
+		} else {
+			isolationMuscleUsed[ex.PrimaryMuscle] = true
 		}
 	}
 
-	// Second pass: fill remaining slots with anything that hits the day's
-	// muscles. An empty pattern means "any pattern".
+	for _, s := range tmpl.Slots {
+		if len(chosen) >= count {
+			break
+		}
+		ex, ok := bestMatchForSlot(pool, s, dayMuscles, chosenIDs, used, usedRegions,
+			compoundPatternUsed, isolationMuscleUsed, rng, recoveryAdjustment)
+		if !ok {
+			continue
+		}
+		chosen = append(chosen, ex)
+		record(ex)
+	}
+
 	for len(chosen) < count {
-		ex, ok := bestMatch(pool, "", dayMuscles, chosenIDs, used, rng, recoveryAdjustment)
+		s := slot{Pattern: domain.Isolation}
+		ex, ok := bestMatchForSlot(pool, s, dayMuscles, chosenIDs, used, usedRegions,
+			compoundPatternUsed, isolationMuscleUsed, rng, recoveryAdjustment)
 		if !ok {
 			break
 		}
 		chosen = append(chosen, ex)
-		chosenIDs[ex.ID] = true
-		used[ex.ID]++
+		record(ex)
 	}
 	return chosen
 }
 
-// bestMatch returns the highest-scoring exercise that matches the pattern (or
-// any pattern if pat is ""), targets the day's muscles, and has not already
-// been chosen for this day.
-func bestMatch(
+// bestMatchForSlot returns the highest-scoring exercise that satisfies the
+// slot's pattern requirement and respects the session-level dedupe rules.
+// Returns ok=false when no eligible candidate exists (e.g., user has no
+// equipment for any matching exercise — the day will simply have one
+// fewer movement, surfaced as a plan warning by the generator).
+func bestMatchForSlot(
 	pool []domain.Exercise,
-	pat domain.MovementPattern,
+	s slot,
 	dayMuscles map[domain.MuscleGroup]bool,
 	chosenIDs map[string]bool,
 	used map[string]int,
+	usedRegions map[domain.MuscleGroup]map[string]int,
+	compoundPatternUsed map[domain.MovementPattern]bool,
+	isolationMuscleUsed map[domain.MuscleGroup]bool,
 	rng *rand.Rand,
 	recoveryAdjustment float64,
 ) (domain.Exercise, bool) {
@@ -103,42 +142,100 @@ func bestMatch(
 		if chosenIDs[ex.ID] {
 			continue
 		}
-		if pat != "" && ex.Pattern != pat {
+		if ex.Pattern != s.Pattern {
 			continue
 		}
-		if !ex.TargetsAny(dayMuscles) {
+		// Compound dedupe per pattern: skip if a compound for this pattern
+		// has already been placed.
+		if ex.Compound && compoundPatternUsed[ex.Pattern] {
 			continue
 		}
-		cands = append(cands, scored{ex: ex, score: scoreExercise(ex, dayMuscles, used, rng, recoveryAdjustment)})
+		// Isolation dedupe per primary muscle: skip if we already have an
+		// isolation hitting this muscle in this session.
+		if !ex.Compound && isolationMuscleUsed[ex.PrimaryMuscle] {
+			continue
+		}
+		// Strict primary-muscle gate. The old algorithm allowed any exercise
+		// whose secondary muscles overlapped the day, which let pulling
+		// movements (Scapular Pull-Up — primary Back, secondary Shoulders)
+		// sneak into Push day via the shoulder secondary tag. Requiring the
+		// primary to be a day muscle eliminates that whole class of bug.
+		if !dayMuscles[ex.PrimaryMuscle] {
+			continue
+		}
+		cands = append(cands, scored{
+			ex:    ex,
+			score: scoreExercise(ex, s.Muscle, dayMuscles, used, usedRegions, rng, recoveryAdjustment),
+		})
 	}
 	if len(cands) == 0 {
 		return domain.Exercise{}, false
 	}
 	sort.Slice(cands, func(i, j int) bool {
 		if cands[i].score == cands[j].score {
-			return cands[i].ex.ID < cands[j].ex.ID // stable tie-break
+			return cands[i].ex.ID < cands[j].ex.ID
 		}
 		return cands[i].score > cands[j].score
 	})
 	return cands[0].ex, true
 }
 
-// scoreExercise ranks a candidate: compounds and primary-muscle matches score
-// higher, repeated use across the plan is penalized for variety, and a small
-// seeded jitter breaks near-ties differently per seed. recoveryAdjustment is
-// subtracted from the compound bonus; with low recovery a compound is still
-// viable but its margin over an isolation movement narrows or inverts.
-func scoreExercise(ex domain.Exercise, dayMuscles map[domain.MuscleGroup]bool, used map[string]int, rng *rand.Rand, recoveryAdjustment float64) float64 {
+// scoreExercise ranks a candidate for a slot. Hierarchy:
+//
+//   - +3 compound bonus (offset by recoveryAdjustment when fatigued)
+//   - +3 exact muscle hint match (slot.Muscle == ex.PrimaryMuscle) — this
+//     is the biggest factor for an isolation slot, where it means "the
+//     right muscle for this slot"
+//   - +1 secondary muscle hint match (slot.Muscle is in ex.SecondaryMuscles)
+//   - +2 primary muscle in day muscles (general fit)
+//   - -1.5 per prior use across the plan (variety)
+//   - +0..0.5 seeded jitter (so equally-scored candidates rotate plan to plan)
+func scoreExercise(
+	ex domain.Exercise,
+	slotMuscle domain.MuscleGroup,
+	dayMuscles map[domain.MuscleGroup]bool,
+	used map[string]int,
+	usedRegions map[domain.MuscleGroup]map[string]int,
+	rng *rand.Rand,
+	recoveryAdjustment float64,
+) float64 {
 	score := 0.0
 	if ex.Compound {
 		score += 3.0 - recoveryAdjustment
+	}
+	if slotMuscle != "" {
+		if ex.PrimaryMuscle == slotMuscle {
+			score += 3.0
+		} else if hasMuscle(ex.SecondaryMuscles, slotMuscle) {
+			score += 1.0
+		}
 	}
 	if dayMuscles[ex.PrimaryMuscle] {
 		score += 2.0
 	}
 	score -= float64(used[ex.ID]) * 1.5
+	// Region rotation: penalize regions of this primary muscle that have
+	// already been hit elsewhere in the plan. This is what makes the
+	// engine pick "Cable Overhead Triceps Extension" (long head) on
+	// Tuesday's Push after "Cable Triceps Pushdown" (lateral head) ran on
+	// Monday's Push. Untagged exercises (Region == "") receive no
+	// adjustment.
+	if ex.Region != "" {
+		if hits := usedRegions[ex.PrimaryMuscle][ex.Region]; hits > 0 {
+			score -= float64(hits) * 1.25
+		}
+	}
 	score += rng.Float64() * 0.5
 	return score
+}
+
+func hasMuscle(ms []domain.MuscleGroup, target domain.MuscleGroup) bool {
+	for _, m := range ms {
+		if m == target {
+			return true
+		}
+	}
+	return false
 }
 
 func toMuscleSet(ms []domain.MuscleGroup) map[domain.MuscleGroup]bool {

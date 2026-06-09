@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/ataliaferro46/go-workout-api/internal/domain"
 )
@@ -17,6 +18,14 @@ type Repository interface {
 	Get(ctx context.Context, id string) (domain.Workout, error)
 	ListByUser(ctx context.Context, userID string) ([]domain.Workout, error)
 	Delete(ctx context.Context, id string) error
+	// LogSet upserts a single completed set. Idempotent on
+	// (workoutID, exercisePosition, setNumber).
+	LogSet(ctx context.Context, workoutID string, exercisePosition, setNumber, reps int, weightKG float64, completedAt time.Time) error
+	// LastSetsForExercise returns the most recent logged sets the user
+	// has recorded for the named exercise (case-insensitive). The second
+	// return value is the timestamp of the latest set. Both zero when no
+	// match exists — used by the live workout page's "last time" hint.
+	LastSetsForExercise(ctx context.Context, userID, exerciseName string) ([]domain.LoggedSet, time.Time, error)
 }
 
 // InMemoryRepository is a concurrency-safe, in-memory Repository. The RWMutex
@@ -69,6 +78,76 @@ func (r *InMemoryRepository) ListByUser(ctx context.Context, userID string) ([]d
 		return out[i].CreatedAt.After(out[j].CreatedAt)
 	})
 	return out, nil
+}
+
+// LogSet inserts/upserts a per-set log entry on the in-memory workout.
+func (r *InMemoryRepository) LogSet(ctx context.Context, workoutID string, exercisePosition, setNumber, reps int, weightKG float64, completedAt time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	w, ok := r.workouts[workoutID]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	if exercisePosition < 0 || exercisePosition >= len(w.Exercises) {
+		return domain.ErrNotFound
+	}
+	logs := w.Exercises[exercisePosition].LoggedSets
+	replaced := false
+	for i := range logs {
+		if logs[i].SetNumber == setNumber {
+			logs[i] = domain.LoggedSet{SetNumber: setNumber, Reps: reps, WeightKG: weightKG, CompletedAt: completedAt}
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		logs = append(logs, domain.LoggedSet{SetNumber: setNumber, Reps: reps, WeightKG: weightKG, CompletedAt: completedAt})
+		sort.Slice(logs, func(i, j int) bool { return logs[i].SetNumber < logs[j].SetNumber })
+	}
+	w.Exercises[exercisePosition].LoggedSets = logs
+	r.workouts[workoutID] = w
+	return nil
+}
+
+// LastSetsForExercise scans the in-memory store newest-first and returns
+// the first match's logged sets.
+func (r *InMemoryRepository) LastSetsForExercise(ctx context.Context, userID, exerciseName string) ([]domain.LoggedSet, time.Time, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	candidates := make([]domain.Workout, 0)
+	for _, w := range r.workouts {
+		if w.UserID == userID {
+			candidates = append(candidates, w)
+		}
+	}
+	sort.Slice(candidates, func(i, j int) bool { return candidates[i].CreatedAt.After(candidates[j].CreatedAt) })
+	for _, w := range candidates {
+		for _, ex := range w.Exercises {
+			if eqInsensitive(ex.Name, exerciseName) && len(ex.LoggedSets) > 0 {
+				return ex.LoggedSets, ex.LoggedSets[len(ex.LoggedSets)-1].CompletedAt, nil
+			}
+		}
+	}
+	return nil, time.Time{}, nil
+}
+
+func eqInsensitive(a, b string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := 0; i < len(a); i++ {
+		ca, cb := a[i], b[i]
+		if ca >= 'A' && ca <= 'Z' {
+			ca += 32
+		}
+		if cb >= 'A' && cb <= 'Z' {
+			cb += 32
+		}
+		if ca != cb {
+			return false
+		}
+	}
+	return true
 }
 
 // Delete removes a workout by ID or returns domain.ErrNotFound.

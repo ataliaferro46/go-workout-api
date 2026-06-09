@@ -12,8 +12,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ataliaferro46/go-workout-api/internal/auth"
 	"github.com/ataliaferro46/go-workout-api/internal/domain"
 )
+
+func bioPassthroughAuth(userID string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := auth.WithUser(r.Context(), auth.User{ID: userID})
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
 
 func newTestService(t *testing.T) (*Service, *MockProvider) {
 	t.Helper()
@@ -37,14 +47,13 @@ func newTestService(t *testing.T) (*Service, *MockProvider) {
 func newTestServer(t *testing.T) (*http.ServeMux, *Service, *MockProvider) {
 	svc, mock := newTestService(t)
 	mux := http.NewServeMux()
-	NewHandler(svc).Routes(mux)
+	NewHandler(svc).Routes(mux, bioPassthroughAuth("u1"))
 	return mux, svc, mock
 }
 
 func TestHandler_ConnectReturnsAuthURL(t *testing.T) {
 	mux, _, _ := newTestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/v1/biometrics/connect/mock", nil)
-	req.Header.Set("X-User-ID", "u1")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -57,20 +66,9 @@ func TestHandler_ConnectReturnsAuthURL(t *testing.T) {
 	}
 }
 
-func TestHandler_ConnectMissingUserIDReturns400(t *testing.T) {
-	mux, _, _ := newTestServer(t)
-	req := httptest.NewRequest(http.MethodGet, "/v1/biometrics/connect/mock", nil)
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rec.Code)
-	}
-}
-
 func TestHandler_UnknownProviderReturns500(t *testing.T) {
 	mux, _, _ := newTestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/v1/biometrics/connect/unknown", nil)
-	req.Header.Set("X-User-ID", "u1")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 	// ErrUnknownProvider is not a known sentinel to httpx.Error so it
@@ -157,7 +155,6 @@ func TestHandler_LatestReturnsPerKindMap(t *testing.T) {
 		MakeReading("u1", domain.KindRecovery, 0.65, time.Now().UTC(), "u1-rec-1"))
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/biometrics/latest", nil)
-	req.Header.Set("X-User-ID", "u1")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {

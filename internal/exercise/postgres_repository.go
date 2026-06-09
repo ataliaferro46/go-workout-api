@@ -37,8 +37,8 @@ func (r *PostgresRepository) Create(ctx context.Context, e domain.Exercise) erro
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO exercises
 			(id, name, primary_muscle, secondary_muscles, pattern,
-			 required_equipment, compound, min_level, contraindications)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			 required_equipment, compound, min_level, contraindications, region)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`,
 		e.ID,
 		e.Name,
@@ -49,6 +49,7 @@ func (r *PostgresRepository) Create(ctx context.Context, e domain.Exercise) erro
 		e.Compound,
 		string(e.MinLevel),
 		bodyPartsToStrings(e.Contraindications),
+		e.Region,
 	)
 	if err != nil {
 		return mapInsertError("insert exercise", err)
@@ -78,7 +79,8 @@ func (r *PostgresRepository) Update(ctx context.Context, e domain.Exercise) erro
 			required_equipment = $6,
 			compound = $7,
 			min_level = $8,
-			contraindications = $9
+			contraindications = $9,
+			region = $10
 		WHERE id = $1
 	`,
 		e.ID,
@@ -90,6 +92,7 @@ func (r *PostgresRepository) Update(ctx context.Context, e domain.Exercise) erro
 		e.Compound,
 		string(e.MinLevel),
 		bodyPartsToStrings(e.Contraindications),
+		e.Region,
 	)
 	if err != nil {
 		return mapInsertError("update exercise", err)
@@ -133,7 +136,7 @@ func (r *PostgresRepository) ListByPattern(ctx context.Context, pattern domain.M
 
 const exerciseSelect = `
 	SELECT id, name, primary_muscle, secondary_muscles, pattern,
-	       required_equipment, compound, min_level, contraindications
+	       required_equipment, compound, min_level, contraindications, region
 	FROM exercises
 `
 
@@ -143,13 +146,13 @@ type scanFn func(dest ...any) error
 
 func scanExercise(scan scanFn) (domain.Exercise, error) {
 	var (
-		id, name, primary, pattern, minLevel string
-		secondary, equipment, contras        []string
-		compound                             bool
+		id, name, primary, pattern, minLevel, region string
+		secondary, equipment, contras                []string
+		compound                                     bool
 	)
 	if err := scan(
 		&id, &name, &primary, &secondary, &pattern,
-		&equipment, &compound, &minLevel, &contras,
+		&equipment, &compound, &minLevel, &contras, &region,
 	); err != nil {
 		return domain.Exercise{}, err
 	}
@@ -163,6 +166,7 @@ func scanExercise(scan scanFn) (domain.Exercise, error) {
 		Compound:          compound,
 		MinLevel:          domain.ExperienceLevel(minLevel),
 		Contraindications: stringsToBodyParts(contras),
+		Region:            region,
 	}, nil
 }
 

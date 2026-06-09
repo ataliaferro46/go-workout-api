@@ -142,5 +142,24 @@ var seedExercises = []domain.Exercise{
 	{ID: "band-pull-apart", Name: "Band Pull-Apart", PrimaryMuscle: domain.Back, SecondaryMuscles: []domain.MuscleGroup{domain.Shoulders}, Pattern: domain.Isolation, RequiredEquipment: []domain.Equipment{bd}, Compound: false, MinLevel: domain.Beginner},
 	{ID: "scapular-pull-up", Name: "Scapular Pull-Up", PrimaryMuscle: domain.Back, SecondaryMuscles: []domain.MuscleGroup{domain.Shoulders}, Pattern: domain.Isolation, RequiredEquipment: []domain.Equipment{pb}, Compound: false, MinLevel: domain.Beginner},
 	{ID: "dead-hang", Name: "Dead Hang", PrimaryMuscle: domain.Back, SecondaryMuscles: []domain.MuscleGroup{domain.Shoulders, domain.Core}, Pattern: domain.Isolation, RequiredEquipment: []domain.Equipment{pb}, Compound: false, MinLevel: domain.Beginner},
-	{ID: "sissy-squat", Name: "Sissy Squat", PrimaryMuscle: domain.Quads, Pattern: domain.Isolation, RequiredEquipment: []domain.Equipment{bw}, Compound: false, MinLevel: domain.Intermediate, Contraindications: []domain.BodyPart{domain.Knee}},
+	{ID: "sissy-squat", Name: "Sissy Squat", PrimaryMuscle: domain.Quads, Pattern: domain.Isolation, RequiredEquipment: []domain.Equipment{bw}, Compound: false, MinLevel: domain.Intermediate, Contraindications: []domain.BodyPart{domain.Knee}, Region: "vasti"},
+
+	// ----- Head/region-specific accessories (added with ADR-068 muscle
+	// regions; see internal/domain/exercise.go and migration 0008). These
+	// fill consensus gaps in the original library — overhead extension for
+	// the long head of the triceps, preacher curl for the short head of
+	// the biceps, rear delt fly for the most underdeveloped delt head,
+	// seated calf raise for the soleus, pullover for the lower lats, and
+	// the barbell hip thrust for direct glute work.
+	{ID: "overhead-tricep-extension", Name: "Cable Overhead Triceps Extension", PrimaryMuscle: domain.Triceps, Pattern: domain.Isolation, RequiredEquipment: []domain.Equipment{cb}, Compound: false, MinLevel: domain.Beginner, Contraindications: []domain.BodyPart{domain.Elbow, domain.Shoulder}, Region: "long_head"},
+	{ID: "tricep-kickback", Name: "Dumbbell Triceps Kickback", PrimaryMuscle: domain.Triceps, Pattern: domain.Isolation, RequiredEquipment: []domain.Equipment{dm}, Compound: false, MinLevel: domain.Beginner, Contraindications: []domain.BodyPart{domain.Elbow}, Region: "lateral_head"},
+	{ID: "preacher-curl", Name: "Preacher Curl", PrimaryMuscle: domain.Biceps, Pattern: domain.Isolation, RequiredEquipment: []domain.Equipment{dm, bn}, Compound: false, MinLevel: domain.Beginner, Contraindications: []domain.BodyPart{domain.Elbow}, Region: "short_head"},
+	{ID: "incline-dumbbell-curl", Name: "Incline Dumbbell Curl", PrimaryMuscle: domain.Biceps, Pattern: domain.Isolation, RequiredEquipment: []domain.Equipment{dm, bn}, Compound: false, MinLevel: domain.Beginner, Contraindications: []domain.BodyPart{domain.Elbow}, Region: "long_head"},
+	{ID: "rear-delt-fly", Name: "Dumbbell Rear Delt Fly", PrimaryMuscle: domain.Shoulders, SecondaryMuscles: []domain.MuscleGroup{domain.Back}, Pattern: domain.Isolation, RequiredEquipment: []domain.Equipment{dm}, Compound: false, MinLevel: domain.Beginner, Region: "rear_delt"},
+	{ID: "seated-calf-raise", Name: "Seated Calf Raise", PrimaryMuscle: domain.Calves, Pattern: domain.Isolation, RequiredEquipment: []domain.Equipment{mc}, Compound: false, MinLevel: domain.Beginner, Region: "soleus"},
+	{ID: "romanian-deadlift-iso", Name: "Single-Leg Romanian Deadlift", PrimaryMuscle: domain.Hamstrings, SecondaryMuscles: []domain.MuscleGroup{domain.Glutes}, Pattern: domain.Isolation, RequiredEquipment: []domain.Equipment{dm}, Compound: false, MinLevel: domain.Intermediate, Contraindications: []domain.BodyPart{domain.LowerBack}, Region: "hip_extension"},
+	{ID: "cable-pullover", Name: "Cable Pullover", PrimaryMuscle: domain.Back, SecondaryMuscles: []domain.MuscleGroup{domain.Chest}, Pattern: domain.Isolation, RequiredEquipment: []domain.Equipment{cb}, Compound: false, MinLevel: domain.Beginner, Contraindications: []domain.BodyPart{domain.Shoulder}, Region: "lats_lower"},
+	{ID: "straight-arm-pulldown", Name: "Straight-Arm Pulldown", PrimaryMuscle: domain.Back, Pattern: domain.Isolation, RequiredEquipment: []domain.Equipment{cb}, Compound: false, MinLevel: domain.Beginner, Contraindications: []domain.BodyPart{domain.Shoulder}, Region: "lats_lower"},
+	{ID: "incline-cable-fly", Name: "Incline Cable Fly", PrimaryMuscle: domain.Chest, SecondaryMuscles: []domain.MuscleGroup{domain.Shoulders}, Pattern: domain.Isolation, RequiredEquipment: []domain.Equipment{cb}, Compound: false, MinLevel: domain.Beginner, Contraindications: []domain.BodyPart{domain.Shoulder}, Region: "upper_chest"},
+	{ID: "hip-thrust", Name: "Barbell Hip Thrust", PrimaryMuscle: domain.Glutes, SecondaryMuscles: []domain.MuscleGroup{domain.Hamstrings}, Pattern: domain.HingePattern, RequiredEquipment: []domain.Equipment{bb, bn}, Compound: true, MinLevel: domain.Beginner, Region: "glute_max"},
 }

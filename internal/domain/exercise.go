@@ -13,6 +13,34 @@ type Exercise struct {
 	Compound          bool            `json:"compound"`
 	MinLevel          ExperienceLevel `json:"min_level"`
 	Contraindications []BodyPart      `json:"contraindications,omitempty"`
+
+	// Region is an anatomical sub-target within the PrimaryMuscle, used by
+	// the plan engine to rotate which "head" or "fiber group" gets worked
+	// across the week. Empty means "no regional preference / hits the whole
+	// muscle." See docs/specs/muscle_regions.md for the consensus mapping;
+	// values are stable strings so they can be checked from the planner
+	// without an enum import cycle.
+	//
+	//   Triceps    → "long_head"   (arm-overhead bias: skullcrusher, overhead ext)
+	//                "lateral_head" (arm-at-side: pushdown, kickback)
+	//                "all_heads"   (close-grip pressing, dips)
+	//   Chest      → "upper_chest" (incline ≥15°)
+	//                "mid_chest"   (flat fly, flat press)
+	//                "lower_chest" (decline, dips)
+	//   Biceps     → "long_head"   (incline curl, behind-body)
+	//                "short_head"  (preacher, concentration)
+	//                "brachialis"  (hammer, reverse curl)
+	//   Shoulders  → "front_delt"  (pressing — usually compounds)
+	//                "lateral_delt"(lateral raise variants)
+	//                "rear_delt"   (face pull, rear delt fly)
+	//   Back       → "lats_width"  (vertical pulls)
+	//                "mid_back"    (horizontal pulls / rhomboids)
+	//                "lats_lower"  (pullover / straight-arm pulldown)
+	//   Hamstrings → "knee_flexion"(leg curls)
+	//                "hip_extension"(RDL, good morning)
+	//   Calves     → "gastrocnemius"(standing — knee straight)
+	//                "soleus"      (seated — knee bent)
+	Region string `json:"region,omitempty"`
 }
 
 // RequiresOnly reports whether every piece of equipment this exercise needs is

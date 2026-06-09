@@ -136,6 +136,164 @@ func (s *Service) Disconnect(ctx context.Context, userID, provider string) error
 	return nil
 }
 
+// IntensitySummary captures what we can say about a workout's intensity
+// from Oura HR data. Zero values mean "no data" — the front-end shows
+// "not yet computed" instead of pretending.
+type IntensitySummary struct {
+	AvgBPM           int           `json:"avg_bpm"`
+	MaxBPM           int           `json:"max_bpm"`
+	SamplesCount     int           `json:"samples_count"`
+	DurationMinutes  int           `json:"duration_minutes"`
+	MinutesAbove140  int           `json:"minutes_above_140"`
+	Source           string        `json:"source"`
+	ComputedAt       time.Time     `json:"computed_at"`
+}
+
+// IntensityForWindow fetches HR samples from the user's connected
+// provider (Oura today) between start and end, returning summary stats.
+// Returns an empty summary (and no error) if the user has no provider
+// connected — intensity is opt-in, not a hard requirement.
+func (s *Service) IntensityForWindow(ctx context.Context, userID string, start, end time.Time) (IntensitySummary, error) {
+	if !end.After(start) {
+		return IntensitySummary{}, &domain.ValidationError{Message: "end must be after start"}
+	}
+	// Try Oura first; Whoop and others can be added similarly.
+	tok, err := s.tokens.Load(ctx, userID, "oura")
+	if err != nil {
+		// No connected provider that supports HR — return empty so the
+		// front-end can display "connect Oura to see intensity".
+		return IntensitySummary{}, nil
+	}
+	p, err := s.registry.Lookup("oura")
+	if err != nil {
+		return IntensitySummary{}, nil
+	}
+	oura, ok := p.(*OuraProvider)
+	if !ok {
+		return IntensitySummary{}, nil
+	}
+	samples, err := oura.HeartRateInWindow(ctx, tok.AccessToken, start, end)
+	if err != nil {
+		return IntensitySummary{}, err
+	}
+	out := computeIntensity(samples, start, end)
+	out.Source = "oura"
+	out.ComputedAt = s.now()
+	return out, nil
+}
+
+// computeIntensity reduces a list of HR samples to a single intensity
+// summary. Time-above-140 is calculated by assuming each sample
+// represents the interval until the next sample (~5 min by default).
+func computeIntensity(samples []HRSample, start, end time.Time) IntensitySummary {
+	out := IntensitySummary{
+		SamplesCount:    len(samples),
+		DurationMinutes: int(end.Sub(start).Minutes()),
+	}
+	if len(samples) == 0 {
+		return out
+	}
+	sumBPM := 0
+	maxBPM := 0
+	above140Seconds := 0.0
+	for i, s := range samples {
+		sumBPM += s.BPM
+		if s.BPM > maxBPM {
+			maxBPM = s.BPM
+		}
+		// Estimate the interval this sample represents.
+		var intervalSec float64
+		if i+1 < len(samples) {
+			intervalSec = samples[i+1].RecordedAt.Sub(s.RecordedAt).Seconds()
+		} else {
+			intervalSec = end.Sub(s.RecordedAt).Seconds()
+		}
+		if intervalSec < 0 {
+			intervalSec = 0
+		}
+		if intervalSec > 600 {
+			intervalSec = 600 // cap any gap at 10 min so we don't credit huge holes
+		}
+		if s.BPM >= 140 {
+			above140Seconds += intervalSec
+		}
+	}
+	out.AvgBPM = sumBPM / len(samples)
+	out.MaxBPM = maxBPM
+	out.MinutesAbove140 = int(above140Seconds / 60.0)
+	return out
+}
+
+// SyncNow forces an immediate sync for a single (user, provider) pair,
+// bypassing the polling daemon's 15-minute interval. Returns the number of
+// readings ingested. This is what the Settings page's "Sync now" button
+// calls — useful as a UX affordance and as a diagnostic when a connection
+// looks linked but readings are missing.
+func (s *Service) SyncNow(ctx context.Context, userID, providerName string) (int, error) {
+	p, err := s.registry.Lookup(providerName)
+	if err != nil {
+		return 0, err
+	}
+	tok, err := s.tokens.Load(ctx, userID, providerName)
+	if err != nil {
+		return 0, err
+	}
+	state, err := s.syncState.Get(ctx, userID, providerName)
+	since := s.now().Add(-7 * 24 * time.Hour) // fall back to last 7 days
+	if err == nil {
+		since = state.LastSyncedAt
+	} else if !errors.Is(err, ErrSyncStateNotFound) {
+		return 0, err
+	}
+	readings, err := p.LatestSince(ctx, tok.AccessToken, since)
+	if err != nil {
+		return 0, err
+	}
+	n, err := s.IngestReadings(ctx, userID, readings)
+	if err != nil {
+		return 0, err
+	}
+	if err := s.syncState.Set(ctx, SyncState{
+		UserID:       userID,
+		Provider:     providerName,
+		LastSyncedAt: s.now(),
+	}); err != nil {
+		return n, err
+	}
+	return n, nil
+}
+
+// ProviderStatus is the per-provider view the front-end uses to render the
+// Settings page (Connect / Disconnect buttons, last-sync timestamp).
+type ProviderStatus struct {
+	Name         string     `json:"name"`
+	Connected    bool       `json:"connected"`
+	LastSyncedAt *time.Time `json:"last_synced_at,omitempty"`
+}
+
+// ListProviders returns one ProviderStatus per registered provider, with
+// per-user connection state filled in. "mock" is filtered out — it's a dev/
+// test fixture, not something to expose in the user-facing UI.
+func (s *Service) ListProviders(ctx context.Context, userID string) ([]ProviderStatus, error) {
+	names := s.registry.Names()
+	out := make([]ProviderStatus, 0, len(names))
+	for _, name := range names {
+		if name == "mock" {
+			continue
+		}
+		ps := ProviderStatus{Name: name}
+		if _, err := s.tokens.Load(ctx, userID, name); err == nil {
+			ps.Connected = true
+			if state, err := s.syncState.Get(ctx, userID, name); err == nil {
+				t := state.LastSyncedAt
+				ps.LastSyncedAt = &t
+			}
+		}
+		out = append(out, ps)
+	}
+	return out, nil
+}
+
 // LatestForUser returns the most recent reading per kind for the user. Used
 // by GET /v1/biometrics/latest and by the recovery-aware plan path.
 func (s *Service) LatestForUser(ctx context.Context, userID string) (map[domain.Kind]domain.Reading, error) {

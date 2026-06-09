@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>History · workout.api</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/pages/history.css">
+<script src="/shared/shared.js" defer></script>
+<script src="/pages/history.js" defer></script>
+</head>
+<body>
+<div id="site-header"></div>
+
+<main class="container">
+  <section class="page-head">
+    <span class="eyebrow">log</span>
+    <h2>Workout history</h2>
+    <p class="lede">Every session you've started, mapped to the day you did it. Click a day to see what you lifted.</p>
+  </section>
+
+  <div class="mode-tabs" style="margin-bottom: 14px;">
+    <button class="mode-tab active" data-view="calendar">Calendar</button>
+    <button class="mode-tab" data-view="by-target">By target</button>
+  </div>
+
+  <section class="card padded" id="calendar-view">
+    <div class="cal-head">
+      <button class="cal-nav" id="cal-prev" title="Previous month">‹</button>
+      <h3 id="cal-title">…</h3>
+      <button class="cal-nav" id="cal-next" title="Next month">›</button>
+    </div>
+    <div class="cal-dow">
+      <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+    </div>
+    <div class="cal-grid" id="cal-grid"></div>
+  </section>
+
+  <section id="by-target-view" style="display:none">
+    <div id="by-target-body"></div>
+  </section>
+
+  <section id="day-detail" class="day-detail hidden">
+    <h3 id="day-detail-title"></h3>
+    <div id="day-detail-body"></div>
+  </section>
+
+  <div class="callout callout-error hidden" id="error"></div>
+</main>
+
+<div id="site-footer"></div>
+</body>
+</html>

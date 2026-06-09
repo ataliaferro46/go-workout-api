@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Privacy Policy · workout.api</title>
+<meta name="description" content="What workout.api collects, how it's used, and how to delete your data.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/pages/legal.css">
+<script src="/shared/shared.js" defer></script>
+</head>
+<body>
+<div id="site-header"></div>
+
+<main class="container legal">
+  <section class="page-head">
+    <span class="eyebrow">legal</span>
+    <h2>Privacy Policy</h2>
+    <p class="lede">Plain English. No dark patterns. If anything here is unclear, email me.</p>
+    <p class="meta-line">Last updated: June 8, 2026 &middot; Effective immediately.</p>
+  </section>
+
+  <article class="legal-doc card padded">
+
+    <h3>1. Who runs this</h3>
+    <p>
+      <strong>workout.api</strong> is a personal independently-run service built and operated by
+      Alex Taliaferro. It is not a company and not a commercial service. If you have
+      a question, concern, or want your data deleted, email
+      <a href="mailto:alexandertaliaferro1@gmail.com">alexandertaliaferro1@gmail.com</a>
+      and I will respond personally.
+    </p>
+
+    <h3>2. What I collect</h3>
+    <p>I only collect what's necessary to run the product:</p>
+    <ul>
+      <li>
+        <strong>Account info</strong> &mdash; your email address (used to sign in and
+        send the verification link) and your password. Passwords are never stored as
+        plaintext; they are hashed with bcrypt (cost 12) before being written to the
+        database.
+      </li>
+      <li>
+        <strong>Workout data you create</strong> &mdash; the plans you generate, the
+        sessions you log, the exercises you save. This is the entire point of the
+        app, so deleting your account also deletes this data.
+      </li>
+      <li>
+        <strong>Biometric data (optional)</strong> &mdash; if you connect a Whoop or
+        Oura account, I store an encrypted copy of the OAuth tokens (AES-GCM, keyed
+        by an HKDF-derived per-record key) and a copy of the recovery/readiness
+        readings the providers return. You can disconnect a provider at any time,
+        which deletes both the tokens and the readings.
+      </li>
+      <li>
+        <strong>Operational data</strong> &mdash; basic HTTP server logs (request
+        path, status code, request id, user agent). Retained for ~7 days for
+        debugging. No third-party analytics, no advertising trackers, no fingerprinting.
+      </li>
+    </ul>
+
+    <h3>3. What I don't collect</h3>
+    <ul>
+      <li>No Google Analytics, Meta Pixel, Hotjar, or any analytics platform.</li>
+      <li>No advertising IDs.</li>
+      <li>No location data beyond what's implicit in a request IP.</li>
+      <li>No payment information &mdash; the service is free and has no billing system.</li>
+      <li>No data is sold or shared with marketing partners. There are no marketing partners.</li>
+    </ul>
+
+    <h3>4. Who I share data with</h3>
+    <p>
+      Only the infrastructure providers required to run the app, and only what they
+      need to do their job:
+    </p>
+    <ul>
+      <li><strong>Fly.io</strong> (United States) &mdash; runs the application server.</li>
+      <li><strong>Neon</strong> (United States) &mdash; hosts the Postgres database.</li>
+      <li><strong>Resend</strong> (United States) &mdash; sends the email verification message (only your email address is shared).</li>
+      <li><strong>Cloudflare</strong> (United States) &mdash; provides DNS for the scrift.dev domain (no application traffic is proxied through Cloudflare).</li>
+      <li><strong>Whoop / Oura</strong> (United States) &mdash; only if you choose to connect a biometrics account, in which case OAuth flows are between you, them, and the application.</li>
+    </ul>
+    <p>
+      I do not share data with anyone else. There are no advertising or analytics
+      relationships.
+    </p>
+
+    <h3>5. How long I keep it</h3>
+    <p>
+      Account and workout data is retained until you delete your account or until I
+      take the project offline, whichever comes first. Operational logs are retained
+      for approximately 7 days. Biometric tokens and readings are retained until you
+      disconnect the provider.
+    </p>
+
+    <h3>6. How to delete your data</h3>
+    <p>
+      Email <a href="mailto:alexandertaliaferro1@gmail.com">alexandertaliaferro1@gmail.com</a>
+      from the address on your account and ask for deletion. I'll remove your row and
+      cascading data within 7 days and reply to confirm. (A self-service "delete
+      account" button is on the roadmap; until then, email is the path.)
+    </p>
+
+    <h3>7. Cookies</h3>
+    <p>
+      The app sets exactly one cookie: <code>session</code>, an opaque HttpOnly
+      session token used to keep you logged in. It is flagged
+      <code>Secure; SameSite=Lax</code>, expires after 30 days, and contains no
+      personal information. There are no tracking, advertising, or analytics
+      cookies.
+    </p>
+
+    <h3>8. Security</h3>
+    <p>
+      Passwords are bcrypt-hashed. Session and verification tokens are stored as
+      SHA-256 hashes rather than plaintext, so a database compromise cannot be used
+      to forge active sessions. Biometric OAuth tokens are AES-GCM encrypted at
+      rest with per-record HKDF-derived keys. The application is served over HTTPS
+      (Let's Encrypt certificates via Fly.io). That said: this is a portfolio
+      project, not a hardened production system. Do not store sensitive personal
+      information here.
+    </p>
+
+    <h3>9. Your rights</h3>
+    <p>
+      Depending on where you live (GDPR / CCPA / state privacy laws), you may have
+      the right to access, correct, or delete your data, and to ask for a copy of
+      what's stored. Email me and I'll honor all of these without arguing.
+    </p>
+
+    <h3>10. Children</h3>
+    <p>
+      The service is not directed at people under 13 (or 16 in the EU). If you are
+      under that age, please do not create an account.
+    </p>
+
+    <h3>11. Changes</h3>
+    <p>
+      If this policy changes, the "Last updated" date at the top will reflect it.
+      Material changes will also trigger an email to existing accounts before they
+      take effect.
+    </p>
+
+    <h3>12. Contact</h3>
+    <p>
+      <a href="mailto:alexandertaliaferro1@gmail.com">alexandertaliaferro1@gmail.com</a>
+    </p>
+  </article>
+
+  <p class="legal-foot">
+    See also: <a href="/terms">Terms of Service</a>.
+  </p>
+</main>
+
+<div id="site-footer"></div>
+</body>
+</html>

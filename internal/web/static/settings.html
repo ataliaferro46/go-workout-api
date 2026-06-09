@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Settings · workout.api</title>
+<meta name="description" content="Connect your Oura or Whoop account; manage your workout.api profile.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/pages/settings.css">
+<script src="/shared/shared.js" defer></script>
+<script src="/pages/settings.js" defer></script>
+</head>
+<body>
+<div id="site-header"></div>
+
+<main class="container">
+  <section class="page-head">
+    <span class="eyebrow">account</span>
+    <h2>Settings</h2>
+    <p class="lede">Manage your profile and connect biometric devices to shape recovery-aware plans.</p>
+  </section>
+
+  <div class="callout callout-success hidden" id="flash-success"></div>
+  <div class="callout callout-error hidden" id="flash-error"></div>
+
+  <section class="settings-section">
+    <h3 class="section-title">Profile</h3>
+    <div class="card padded" id="profile-card">
+      <div class="profile-row">
+        <div class="profile-label">Email</div>
+        <div class="profile-value" id="profile-email">loading…</div>
+      </div>
+      <form id="profile-form" class="profile-edit">
+        <div class="profile-edit-grid">
+          <div class="field">
+            <label>Height (cm)</label>
+            <input class="input" type="number" name="height_cm" min="50" max="250" step="1">
+          </div>
+          <div class="field">
+            <label>Weight (kg)</label>
+            <input class="input" type="number" name="weight_kg" min="20" max="300" step="0.1">
+          </div>
+          <div class="field">
+            <label>Birth date</label>
+            <input class="input" type="date" name="birth_date">
+          </div>
+          <div class="field">
+            <label>Sex (for calorie estimation)</label>
+            <select class="input" name="sex">
+              <option value="">—</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+        </div>
+        <p class="profile-help" id="profile-bmi"></p>
+        <button type="submit" class="btn btn-primary" id="profile-save">Save</button>
+      </form>
+      <div class="profile-row">
+        <div class="profile-label">Member since</div>
+        <div class="profile-value" id="profile-joined">loading…</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="settings-section">
+    <h3 class="section-title">Integrations</h3>
+    <p class="section-sub">Connect a wearable to inform plan generation. Recovery and readiness scores adjust intensity for the next session.</p>
+    <div id="providers" class="providers-grid">
+      <div class="card padded" style="grid-column: 1 / -1;">
+        <p style="margin: 0; color: var(--text-dim);">Loading integrations…</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="settings-section" id="readings-section">
+    <h3 class="section-title">Latest readings</h3>
+    <p class="section-sub">The freshest biometric scores ingested from your providers. Updates every 15 minutes.</p>
+    <div id="readings" class="readings-grid">
+      <div class="card padded" style="grid-column: 1 / -1;">
+        <p style="margin: 0; color: var(--text-dim);">Loading…</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="settings-section">
+    <h3 class="section-title">Data</h3>
+    <div class="card padded">
+      <p style="color: var(--text-dim); margin: 0 0 12px;">
+        Want to delete your account and all associated data? Email
+        <a href="mailto:alexandertaliaferro1@gmail.com" class="link">alexandertaliaferro1@gmail.com</a>
+        from your account address and I'll do it within 7 days.
+      </p>
+      <p style="color: var(--text-faint); margin: 0; font-size: 13px;">
+        Self-service account deletion is on the roadmap.
+      </p>
+    </div>
+  </section>
+</main>
+
+<div id="site-footer"></div>
+</body>
+</html>

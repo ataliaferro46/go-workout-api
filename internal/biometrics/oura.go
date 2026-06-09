@@ -193,3 +193,60 @@ func (p *OuraProvider) VerifyWebhook(headers http.Header, body []byte) error {
 	}
 	return nil
 }
+
+// HRSample is one heart-rate sample returned by the Oura HR endpoint.
+// Source tags Oura's classification: "rest", "awake", "live", "session"
+// (live workout), "asleep". Any sample within a workout time window
+// counts toward the intensity computation regardless of source — Oura
+// often tags a gym session as "awake" rather than "session".
+type HRSample struct {
+	BPM        int
+	Source     string
+	RecordedAt time.Time
+}
+
+// HeartRateInWindow fetches HR samples from Oura between start and end.
+// Used by the workout-intensity feature to compute average / peak BPM,
+// session duration, and time-above-zone-4 for a completed session.
+//
+// Oura returns samples at roughly 5-minute intervals; a short gym
+// session may produce only a handful of points. The intensity service
+// handles this gracefully — if we get 0 samples back we leave the cache
+// row at zero so the front-end can show "no data" instead of pretending.
+func (p *OuraProvider) HeartRateInWindow(ctx context.Context, accessToken string, start, end time.Time) ([]HRSample, error) {
+	q := url.Values{
+		"start_datetime": {start.UTC().Format(time.RFC3339)},
+		"end_datetime":   {end.UTC().Format(time.RFC3339)},
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		p.cfg.APIBaseURL+"/usercollection/heartrate?"+q.Encode(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	resp, err := p.cfg.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("get heartrate: %w", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("oura heartrate: %d %s", resp.StatusCode, string(body))
+	}
+	var page struct {
+		Data []struct {
+			BPM       int       `json:"bpm"`
+			Source    string    `json:"source"`
+			Timestamp time.Time `json:"timestamp"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &page); err != nil {
+		return nil, fmt.Errorf("decode hr: %w", err)
+	}
+	out := make([]HRSample, 0, len(page.Data))
+	for _, s := range page.Data {
+		out = append(out, HRSample{BPM: s.BPM, Source: s.Source, RecordedAt: s.Timestamp})
+	}
+	return out, nil
+}

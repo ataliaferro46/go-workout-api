@@ -7,15 +7,25 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/ataliaferro46/go-workout-api/internal/auth"
 	"github.com/ataliaferro46/go-workout-api/internal/domain"
 )
 
-// newTestServer builds a mux wired to a fresh in-memory service, exercising the
-// same routing the real server uses.
-func newTestServer() *http.ServeMux {
+func passthroughAuth(userID string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := auth.WithUser(r.Context(), auth.User{ID: userID})
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+func newTestServer() *http.ServeMux { return newTestServerFor("user-1") }
+
+func newTestServerFor(userID string) *http.ServeMux {
 	svc := NewService(NewInMemoryRepository(), nil, nil)
 	mux := http.NewServeMux()
-	NewHandler(svc).Routes(mux)
+	NewHandler(svc).Routes(mux, passthroughAuth(userID))
 	return mux
 }
 
@@ -29,7 +39,6 @@ func TestHandler_CreateAndGet(t *testing.T) {
 		},
 	})
 	req := httptest.NewRequest(http.MethodPost, "/v1/workouts", bytes.NewReader(body))
-	req.Header.Set("X-User-ID", "user-1")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
@@ -63,23 +72,10 @@ func TestHandler_CreateAndGet(t *testing.T) {
 	}
 }
 
-func TestHandler_Create_MissingUserID(t *testing.T) {
-	mux := newTestServer()
-
-	req := httptest.NewRequest(http.MethodPost, "/v1/workouts", bytes.NewReader([]byte(`{"name":"x"}`)))
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
-	}
-}
-
 func TestHandler_Create_UnknownField(t *testing.T) {
 	mux := newTestServer()
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/workouts", bytes.NewReader([]byte(`{"name":"x","bogus":true}`)))
-	req.Header.Set("X-User-ID", "user-1")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
@@ -101,11 +97,10 @@ func TestHandler_Get_NotFound(t *testing.T) {
 }
 
 func TestHandler_DeleteAndList(t *testing.T) {
-	mux := newTestServer()
+	mux := newTestServerFor("user-9")
 
 	body, _ := json.Marshal(map[string]any{"name": "Pull Day"})
 	req := httptest.NewRequest(http.MethodPost, "/v1/workouts", bytes.NewReader(body))
-	req.Header.Set("X-User-ID", "user-9")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 	var created domain.Workout
@@ -119,7 +114,6 @@ func TestHandler_DeleteAndList(t *testing.T) {
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/v1/workouts", nil)
-	req.Header.Set("X-User-ID", "user-9")
 	rec = httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {

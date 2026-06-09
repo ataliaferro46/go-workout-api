@@ -2,6 +2,7 @@ package workout
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -38,10 +39,18 @@ func (r *PostgresRepository) Create(ctx context.Context, w domain.Workout) error
 	}
 	defer tx.Rollback(ctx)
 
+	var planArg any
+	var planDayArg any
+	if w.PlanID != "" {
+		planArg = w.PlanID
+	}
+	if w.PlanDayIdx > 0 {
+		planDayArg = w.PlanDayIdx
+	}
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO workouts (id, user_id, name, notes, created_at)
-		VALUES ($1, $2, $3, $4, $5)
-	`, w.ID, w.UserID, w.Name, w.Notes, w.CreatedAt); err != nil {
+		INSERT INTO workouts (id, user_id, name, notes, created_at, plan_id, plan_day_idx)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`, w.ID, w.UserID, w.Name, w.Notes, w.CreatedAt, planArg, planDayArg); err != nil {
 		return fmt.Errorf("insert workout: %w", err)
 	}
 	for i, ex := range w.Exercises {
@@ -63,12 +72,15 @@ func (r *PostgresRepository) Create(ctx context.Context, w domain.Workout) error
 // WHERE / ORDER BY clauses.
 const workoutSelect = `
 	SELECT w.id, w.user_id, w.name, w.notes, w.created_at,
+	       w.plan_id, w.plan_day_idx, w.type,
 	       e.position, e.name, e.sets, e.reps, e.weight_kg
 	FROM workouts w
 	LEFT JOIN workout_exercises e ON e.workout_id = w.id
 `
 
 // Get returns the workout with the given ID or domain.ErrNotFound.
+// LoggedSets are eagerly attached to each exercise — the workout-in-progress
+// page needs them to render which sets are already done.
 func (r *PostgresRepository) Get(ctx context.Context, id string) (domain.Workout, error) {
 	rows, err := r.pool.Query(ctx,
 		workoutSelect+` WHERE w.id = $1 ORDER BY e.position`, id)
@@ -84,7 +96,24 @@ func (r *PostgresRepository) Get(ctx context.Context, id string) (domain.Workout
 	if len(workouts) == 0 {
 		return domain.Workout{}, domain.ErrNotFound
 	}
-	return workouts[0], nil
+	w := workouts[0]
+	setsByPos, err := r.GetSets(ctx, id)
+	if err != nil {
+		return domain.Workout{}, err
+	}
+	for i := range w.Exercises {
+		if logs, ok := setsByPos[i]; ok {
+			w.Exercises[i].LoggedSets = logs
+		}
+	}
+	if w.Type == "cardio" {
+		cs, err := r.GetCardioSession(ctx, id)
+		if err != nil {
+			return domain.Workout{}, err
+		}
+		w.CardioSession = cs
+	}
+	return w, nil
 }
 
 // ListByUser returns a user's workouts newest first. The result is a non-nil
@@ -99,6 +128,169 @@ func (r *PostgresRepository) ListByUser(ctx context.Context, userID string) ([]d
 	}
 	defer rows.Close()
 	return scanWorkouts(rows)
+}
+
+// CreateCardio inserts a cardio workout (workouts row + cardio_sessions
+// row) in one transaction.
+func (r *PostgresRepository) CreateCardio(ctx context.Context, w domain.Workout) error {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO workouts (id, user_id, name, notes, type, created_at)
+		VALUES ($1, $2, $3, $4, 'cardio', $5)
+	`, w.ID, w.UserID, w.Name, w.Notes, w.CreatedAt); err != nil {
+		return fmt.Errorf("insert cardio workout: %w", err)
+	}
+	if w.CardioSession != nil {
+		cs := w.CardioSession
+		var dist any
+		if cs.DistanceKM > 0 {
+			dist = cs.DistanceKM
+		}
+		var hr any
+		if cs.AvgHR > 0 {
+			hr = cs.AvgHR
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO cardio_sessions
+				(workout_id, activity, intensity, duration_minutes, distance_km,
+				 avg_hr, calories, calories_source, notes)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		`, w.ID, cs.Activity, cs.Intensity, cs.DurationMinutes, dist,
+			hr, cs.Calories, cs.CaloriesSource, cs.Notes); err != nil {
+			return fmt.Errorf("insert cardio session: %w", err)
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+// GetCardioSession returns a cardio session detail attached to a workout
+// id, or nil if the workout isn't cardio / has no row.
+func (r *PostgresRepository) GetCardioSession(ctx context.Context, workoutID string) (*domain.CardioSession, error) {
+	row := r.pool.QueryRow(ctx, `
+		SELECT activity, intensity, duration_minutes, distance_km,
+		       avg_hr, calories, calories_source, notes
+		FROM cardio_sessions WHERE workout_id = $1
+	`, workoutID)
+	var cs domain.CardioSession
+	var dist *float64
+	var hr *int32
+	if err := row.Scan(&cs.Activity, &cs.Intensity, &cs.DurationMinutes,
+		&dist, &hr, &cs.Calories, &cs.CaloriesSource, &cs.Notes); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get cardio session: %w", err)
+	}
+	if dist != nil {
+		cs.DistanceKM = *dist
+	}
+	if hr != nil {
+		cs.AvgHR = int(*hr)
+	}
+	return &cs, nil
+}
+
+// LastSetsForExercise returns the most recent logged sets for the given
+// exercise name belonging to userID. Used by the live workout page to
+// show "last time you did this: 3 × 8 @ 80 kg" as a reference. Looks
+// back across all workouts and returns the sets from the latest matching
+// exercise instance.
+func (r *PostgresRepository) LastSetsForExercise(ctx context.Context, userID, exerciseName string) ([]domain.LoggedSet, time.Time, error) {
+	row := r.pool.QueryRow(ctx, `
+		SELECT w.id, e.position
+		FROM workouts w
+		JOIN workout_exercises e ON e.workout_id = w.id
+		WHERE w.user_id = $1 AND lower(e.name) = lower($2)
+		ORDER BY w.created_at DESC
+		LIMIT 1
+	`, userID, exerciseName)
+	var workoutID string
+	var position int32
+	if err := row.Scan(&workoutID, &position); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, time.Time{}, nil
+		}
+		return nil, time.Time{}, fmt.Errorf("find last exercise: %w", err)
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT set_number, reps, weight_kg, completed_at
+		FROM workout_sets
+		WHERE workout_id = $1 AND exercise_position = $2
+		ORDER BY set_number
+	`, workoutID, position)
+	if err != nil {
+		return nil, time.Time{}, fmt.Errorf("query last sets: %w", err)
+	}
+	defer rows.Close()
+	out := make([]domain.LoggedSet, 0)
+	var when time.Time
+	for rows.Next() {
+		var num, reps int32
+		var weight float64
+		var completedAt time.Time
+		if err := rows.Scan(&num, &reps, &weight, &completedAt); err != nil {
+			return nil, time.Time{}, err
+		}
+		out = append(out, domain.LoggedSet{
+			SetNumber: int(num), Reps: int(reps), WeightKG: weight, CompletedAt: completedAt,
+		})
+		if completedAt.After(when) {
+			when = completedAt
+		}
+	}
+	return out, when, rows.Err()
+}
+
+// LogSet records a per-set log entry. Idempotent on (workout_id,
+// exercise_position, set_number) — re-logging the same set overwrites
+// the previous values, so the front-end can let the user correct typos
+// by re-submitting.
+func (r *PostgresRepository) LogSet(ctx context.Context, workoutID string, exercisePosition, setNumber, reps int, weightKG float64, completedAt time.Time) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO workout_sets
+			(workout_id, exercise_position, set_number, reps, weight_kg, completed_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (workout_id, exercise_position, set_number)
+		DO UPDATE SET reps = EXCLUDED.reps,
+		              weight_kg = EXCLUDED.weight_kg,
+		              completed_at = EXCLUDED.completed_at
+	`, workoutID, exercisePosition, setNumber, reps, weightKG, completedAt)
+	if err != nil {
+		return fmt.Errorf("log set: %w", err)
+	}
+	return nil
+}
+
+// GetSets returns all logged sets for a workout, ordered by exercise
+// position and set number.
+func (r *PostgresRepository) GetSets(ctx context.Context, workoutID string) (map[int][]domain.LoggedSet, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT exercise_position, set_number, reps, weight_kg, completed_at
+		FROM workout_sets
+		WHERE workout_id = $1
+		ORDER BY exercise_position, set_number
+	`, workoutID)
+	if err != nil {
+		return nil, fmt.Errorf("query sets: %w", err)
+	}
+	defer rows.Close()
+	out := make(map[int][]domain.LoggedSet)
+	for rows.Next() {
+		var pos, setNum, reps int32
+		var weight float64
+		var completedAt time.Time
+		if err := rows.Scan(&pos, &setNum, &reps, &weight, &completedAt); err != nil {
+			return nil, fmt.Errorf("scan set: %w", err)
+		}
+		out[int(pos)] = append(out[int(pos)], domain.LoggedSet{
+			SetNumber: int(setNum), Reps: int(reps), WeightKG: weight, CompletedAt: completedAt,
+		})
+	}
+	return out, rows.Err()
 }
 
 // Delete removes a workout and (via ON DELETE CASCADE) its exercises.
@@ -127,6 +319,9 @@ func scanWorkouts(rows pgx.Rows) ([]domain.Workout, error) {
 		var (
 			id, userID, name, notes string
 			createdAt               time.Time
+			planID                  *string
+			planDayIdx              *int32
+			workoutType             string
 			position                *int32
 			exName                  *string
 			sets, reps              *int32
@@ -134,18 +329,22 @@ func scanWorkouts(rows pgx.Rows) ([]domain.Workout, error) {
 		)
 		if err := rows.Scan(
 			&id, &userID, &name, &notes, &createdAt,
+			&planID, &planDayIdx, &workoutType,
 			&position, &exName, &sets, &reps, &weightKg,
 		); err != nil {
 			return nil, fmt.Errorf("scan row: %w", err)
 		}
 		if currentIdx < 0 || out[currentIdx].ID != id {
 			out = append(out, domain.Workout{
-				ID:        id,
-				UserID:    userID,
-				Name:      name,
-				Notes:     notes,
-				CreatedAt: createdAt,
-				Exercises: []domain.LoggedExercise{},
+				ID:         id,
+				UserID:     userID,
+				Name:       name,
+				Notes:      notes,
+				Type:       workoutType,
+				PlanID:     deref(planID),
+				PlanDayIdx: int(deref(planDayIdx)),
+				CreatedAt:  createdAt,
+				Exercises:  []domain.LoggedExercise{},
 			})
 			currentIdx = len(out) - 1
 		}

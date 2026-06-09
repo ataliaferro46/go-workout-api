@@ -1,0 +1,247 @@
+/* workout.css — in-progress workout. Mobile-first because users actually
+   open this in the gym on their phone. */
+
+.ex-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+.ex-head {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.ex-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.ex-name {
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  flex: 1;
+}
+.ex-demo, .ex-swap {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  text-decoration: none;
+  background: transparent;
+  border: 1px solid var(--border);
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.ex-demo:hover, .ex-swap:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.ex-last-time {
+  margin-top: 6px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-faint);
+}
+.ex-last-time:empty { display: none; }
+.last-label { text-transform: uppercase; letter-spacing: 0.05em; }
+.last-vals { color: var(--text-dim); }
+
+/* Unit toggle */
+.unit-toggle {
+  display: flex;
+  gap: 0;
+  justify-content: flex-end;
+  margin-bottom: 14px;
+}
+.unit-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 4px 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+.unit-btn:first-child { border-radius: 6px 0 0 6px; }
+.unit-btn:last-child { border-radius: 0 6px 6px 0; border-left: none; }
+.unit-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.ex-dose {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-top: 4px;
+}
+
+.set-row {
+  display: grid;
+  grid-template-columns: 60px 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px dashed var(--border);
+}
+.set-row:last-child { border-bottom: none; }
+.set-num {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.set-inputs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.set-reps, .set-weight {
+  width: 70px;
+  padding: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  text-align: center;
+}
+.set-reps:focus, .set-weight:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+.set-x {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.set-log-btn {
+  margin-left: auto;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.set-log-btn:hover { background: #7c3aed; }
+.set-log-btn:disabled { opacity: 0.6; cursor: wait; }
+
+.set-row.set-done {
+  background: rgba(16, 185, 129, 0.05);
+  margin: 0 -8px;
+  padding-left: 8px;
+  padding-right: 8px;
+  border-radius: 6px;
+}
+.set-row.set-done .set-num { color: #10b981; }
+.set-row.set-done .set-log-btn { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+.set-row.set-done .set-reps,
+.set-row.set-done .set-weight {
+  background: transparent;
+  border-color: rgba(16, 185, 129, 0.3);
+}
+.set-when {
+  grid-column: 2;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  margin-top: 4px;
+}
+
+@media (max-width: 500px) {
+  .set-row { grid-template-columns: 50px 1fr; }
+  .set-reps, .set-weight { width: 56px; padding: 7px 4px; }
+  .set-log-btn { padding: 7px 10px; font-size: 12px; }
+}
+
+/* --- intensity card --- */
+.intensity-grid, .intensity-empty {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.06), rgba(245, 158, 11, 0.06));
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.intensity-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ef4444;
+  margin-bottom: 10px;
+}
+.intensity-src { color: var(--text-faint); font-weight: 400; }
+.intensity-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 10px;
+}
+.intensity-tile {
+  padding: 8px 10px;
+  background: rgba(0,0,0,0.15);
+  border-radius: 8px;
+}
+.intensity-label {
+  font-size: 10px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+}
+.intensity-value {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+}
+.intensity-note {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+/* --- cardio session card --- */
+.cardio-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+}
+.cardio-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.cardio-act {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.cardio-int {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.cardio-note {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+}

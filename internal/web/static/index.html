@@ -19,18 +19,11 @@
 
 <main class="container">
   <section class="hero">
-    <span class="eyebrow">live demo</span>
-    <h1>A training engine, <span class="accent">written in Go</span>.</h1>
+    <span class="eyebrow">generate</span>
+    <h1>Your week, <span class="accent">programmed for you</span>.</h1>
     <p class="lede">
-      Constraint-and-coverage algorithm picks exercises for your goal, equipment, and injuries — then biases the program when you're under-recovered. No CRUD, no LLM, just real code.
+      Pick your goal, equipment, and the days you'll train. We'll generate a complete week of workouts — recovery-aware if your wearable is connected — that hit every muscle group with the right frequency and intensity.
     </p>
-    <div class="hero-meta">
-      <span>94 movements</span>
-      <span>·</span>
-      <span>4 migrations</span>
-      <span>·</span>
-      <span>53 ADRs</span>
-    </div>
   </section>
 
   <section class="card padded form-card">
@@ -38,13 +31,13 @@
       <div class="form-grid">
 
         <div class="field full">
-          <label>Goal</label>
+          <label>Goals <span class="hint">pick one or more — first is primary</span></label>
           <div class="choices">
-            <label class="choice"><input type="radio" name="goal" value="fat_loss"><span>Fat Loss</span></label>
-            <label class="choice"><input type="radio" name="goal" value="muscle_gain" checked><span>Muscle Gain</span></label>
-            <label class="choice"><input type="radio" name="goal" value="strength"><span>Strength</span></label>
-            <label class="choice"><input type="radio" name="goal" value="endurance"><span>Endurance</span></label>
-            <label class="choice"><input type="radio" name="goal" value="general_fitness"><span>General</span></label>
+            <label class="choice"><input type="checkbox" name="goals" value="fat_loss"><span>Fat Loss</span></label>
+            <label class="choice"><input type="checkbox" name="goals" value="muscle_gain" checked><span>Muscle Gain</span></label>
+            <label class="choice"><input type="checkbox" name="goals" value="strength"><span>Strength</span></label>
+            <label class="choice"><input type="checkbox" name="goals" value="endurance"><span>Endurance</span></label>
+            <label class="choice"><input type="checkbox" name="goals" value="general_fitness"><span>General</span></label>
           </div>
         </div>
 
@@ -57,11 +50,43 @@
           </div>
         </div>
 
+        <div class="field full">
+          <label>Training days <span class="hint" id="days-hint">tap the days you'll train</span></label>
+          <div class="weekday-row" id="weekday-row">
+            <button type="button" class="weekday-btn" data-day="mon">Mon</button>
+            <button type="button" class="weekday-btn" data-day="tue">Tue</button>
+            <button type="button" class="weekday-btn" data-day="wed">Wed</button>
+            <button type="button" class="weekday-btn" data-day="thu">Thu</button>
+            <button type="button" class="weekday-btn" data-day="fri">Fri</button>
+            <button type="button" class="weekday-btn" data-day="sat">Sat</button>
+            <button type="button" class="weekday-btn" data-day="sun">Sun</button>
+          </div>
+        </div>
+
         <div class="field">
-          <label>Days / week <span class="hint" id="days-hint">4 days</span></label>
+          <label>Split <span class="hint">how the week splits up</span></label>
+          <div class="choices">
+            <label class="choice"><input type="radio" name="split" value="auto" checked><span>Auto</span></label>
+            <label class="choice"><input type="radio" name="split" value="full_body"><span>Full Body</span></label>
+            <label class="choice"><input type="radio" name="split" value="upper_lower"><span>Upper / Lower</span></label>
+            <label class="choice"><input type="radio" name="split" value="ppl"><span>PPL</span></label>
+            <label class="choice"><input type="radio" name="split" value="ppl_upper_lower"><span>PPL + UL</span></label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Min days between same muscle group <span class="hint" id="recovery-hint">2 days</span></label>
           <div class="slider-row">
-            <input type="range" id="days" name="days_per_week" min="2" max="6" value="4">
-            <span class="slider-value" id="days-val">4</span>
+            <input type="range" id="min-recovery" name="min_recovery_days" min="0" max="4" value="2">
+            <span class="slider-value" id="min-recovery-val">2</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Working sets per exercise <span class="hint" id="sets-hint">auto (from goal)</span></label>
+          <div class="slider-row">
+            <input type="range" id="sets-override" name="sets_override" min="0" max="5" value="0">
+            <span class="slider-value" id="sets-override-val">auto</span>
           </div>
         </div>
 
@@ -94,8 +119,9 @@
         </div>
 
         <div class="field full">
-          <label>Recovery <span class="hint">simulates a Whoop/Oura reading</span></label>
-          <div class="recovery-toggle">
+          <label>Recovery <span class="hint" id="recovery-status">no providers connected — pick manually</span></label>
+          <div class="recovery-toggle" id="recovery-toggle">
+            <button type="button" class="recovery-btn hidden" id="auto-recovery-btn" data-recovery="auto">Auto<span class="label" id="auto-recovery-label">from Oura</span></button>
             <button type="button" class="recovery-btn active" data-recovery="">Off<span class="label">no bias</span></button>
             <button type="button" class="recovery-btn" data-recovery="0.85">High<span class="label">85%</span></button>
             <button type="button" class="recovery-btn" data-recovery="0.50">Medium<span class="label">50%</span></button>

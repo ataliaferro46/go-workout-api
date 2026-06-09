@@ -37,12 +37,17 @@ func NewService(repo Repository, newID IDGenerator, now Clock) *Service {
 	return &Service{repo: repo, newID: newID, now: now}
 }
 
-// CreateInput carries the fields needed to log a workout.
+// CreateInput carries the fields needed to log a workout. PlanID and
+// PlanDayIdx are populated when the workout was started from a generated
+// plan day so a later progress view can correlate "the time you did
+// Tuesday's Pull workout" with the plan it came from.
 type CreateInput struct {
-	UserID    string
-	Name      string
-	Notes     string
-	Exercises []domain.LoggedExercise
+	UserID     string
+	Name       string
+	Notes      string
+	PlanID     string
+	PlanDayIdx int
+	Exercises  []domain.LoggedExercise
 }
 
 // Create validates the input, assembles a domain.Workout, and persists it.
@@ -51,12 +56,14 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (domain.Workout, e
 		return domain.Workout{}, err
 	}
 	w := domain.Workout{
-		ID:        s.newID(),
-		UserID:    strings.TrimSpace(in.UserID),
-		Name:      strings.TrimSpace(in.Name),
-		Notes:     strings.TrimSpace(in.Notes),
-		Exercises: in.Exercises,
-		CreatedAt: s.now().UTC(),
+		ID:         s.newID(),
+		UserID:     strings.TrimSpace(in.UserID),
+		Name:       strings.TrimSpace(in.Name),
+		Notes:      strings.TrimSpace(in.Notes),
+		PlanID:     strings.TrimSpace(in.PlanID),
+		PlanDayIdx: in.PlanDayIdx,
+		Exercises:  in.Exercises,
+		CreatedAt:  s.now().UTC(),
 	}
 	if w.Exercises == nil {
 		w.Exercises = []domain.LoggedExercise{}
@@ -83,6 +90,28 @@ func (s *Service) ListByUser(ctx context.Context, userID string) ([]domain.Worko
 // Delete removes a logged workout by ID.
 func (s *Service) Delete(ctx context.Context, id string) error {
 	return s.repo.Delete(ctx, id)
+}
+
+// LastSetsForExercise returns the most recent logged sets for the user's
+// previous attempt at the named exercise, plus the timestamp of that
+// session. Returns nil + zero time when the user has never logged it.
+func (s *Service) LastSetsForExercise(ctx context.Context, userID, exerciseName string) ([]domain.LoggedSet, time.Time, error) {
+	return s.repo.LastSetsForExercise(ctx, userID, exerciseName)
+}
+
+// LogSet records a per-set log entry on an in-progress workout.
+// Idempotent on (workoutID, exercisePosition, setNumber).
+func (s *Service) LogSet(ctx context.Context, workoutID string, exercisePosition, setNumber, reps int, weightKG float64) error {
+	if setNumber < 1 {
+		return &domain.ValidationError{Message: "set_number must be ≥ 1"}
+	}
+	if reps < 0 {
+		return &domain.ValidationError{Message: "reps must be ≥ 0"}
+	}
+	if weightKG < 0 {
+		return &domain.ValidationError{Message: "weight_kg must be ≥ 0"}
+	}
+	return s.repo.LogSet(ctx, workoutID, exercisePosition, setNumber, reps, weightKG, s.now().UTC())
 }
 
 func validateCreate(in CreateInput) error {

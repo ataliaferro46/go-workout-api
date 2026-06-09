@@ -7,6 +7,7 @@
   'use strict';
 
   document.addEventListener('DOMContentLoaded', async () => {
+    await AUTH.ensureLoggedIn();
     const searchEl = document.getElementById('search');
     const patternEl = document.getElementById('filter-pattern');
     const muscleEl = document.getElementById('filter-muscle');
