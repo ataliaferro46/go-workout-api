@@ -637,14 +637,24 @@ func SumTotals(logs []domain.FoodLog) domain.NutritionTotals {
 // package doesn't take a hard dependency on auth.Service.
 type UserFetcher func(ctx context.Context, userID string) (auth.User, error)
 
+// DailyBurnFetcher returns the user's total daily calorie burn (BMR +
+// activity) for the given date — pulled from a connected wearable. Zero
+// is returned (no error) when no provider is connected.
+type DailyBurnFetcher func(ctx context.Context, userID string, date time.Time) (int, error)
+
 type Handler struct {
-	repo    *Repository
-	getUser UserFetcher
+	repo        *Repository
+	getUser     UserFetcher
+	getDailyBurn DailyBurnFetcher
 }
 
 func NewHandler(repo *Repository, getUser UserFetcher) *Handler {
 	return &Handler{repo: repo, getUser: getUser}
 }
+
+// SetDailyBurnFetcher injects the wearable-backed daily-calorie source.
+// Optional — when nil the nutrition daily view falls back to TDEE target.
+func (h *Handler) SetDailyBurnFetcher(f DailyBurnFetcher) { h.getDailyBurn = f }
 
 func (h *Handler) Routes(mux *http.ServeMux, requireAuth func(http.Handler) http.Handler) {
 	mux.Handle("GET /v1/foods/search", requireAuth(http.HandlerFunc(h.searchFoods)))
@@ -1180,15 +1190,27 @@ func pickMeals(foods []domain.Food, t domain.NutritionTargets) []MealSlot {
 
 // Meal-type word lists. Bias the picker toward foods that "make sense"
 // at the given meal slot so we don't suggest 200g of ground beef at
-// breakfast. These are intentionally permissive — anything that's
-// strongly anti-matched gets penalized (-1.0) but not filtered out, so
-// outlier-but-fit choices can still surface (e.g., chicken at breakfast
-// for a high-protein meal-prep style).
+// breakfast. Permissive but not blind — strong anti-matches get a real
+// penalty so outlier choices have to clear a high bar.
+//
+// notBreakfast catches the long tail of foods nobody eats at breakfast:
+// dinner-style proteins, legumes, raw produce, USDA descriptors like
+// "mature seeds" or "turtle" (black turtle beans). Anything matching
+// these gets -1.5 from breakfast scoring, almost always knocking it out
+// of the running.
 var (
 	breakfastKeywords = []string{"oat", "egg", "yogurt", "banana", "berry", "blueberr", "strawberr",
 		"raspberr", "milk", "bread", "bagel", "granola", "coffee", "pancake", "waffle",
 		"cereal", "muffin", "smoothie", "cottage cheese", "almond butter", "peanut butter",
-		"toast", "breakfast", "kefir", "porridge", "fruit"}
+		"toast", "breakfast", "kefir", "porridge", "fruit", "honey", "jam", "cream cheese"}
+	notBreakfastKeywords = []string{
+		"beef", "pork", "steak", "ground", "rib", "brisket", "chop", "burger",
+		"lamb", "veal", "shank", "roast", "venison", "duck", "goose",
+		"bean", "lentil", "chickpea", "edamame", "tofu", "tempeh", "soybean",
+		"turtle", "mature seed", "kidney", "navy", "pinto", "garbanzo", "lima",
+		"liver", "kidney", "sweetbread", "tripe", "tongue",
+		"raw broccoli", "raw cabbage", "raw asparagus", "raw kale", "raw cauliflower",
+	}
 	dinnerKeywords = []string{"beef", "pork", "steak", "ground", "rib", "brisket", "pasta",
 		"chop", "burger", "lamb", "veal", "shank", "roast", "dinner"}
 	lunchKeywords = []string{"chicken", "salad", "wrap", "sandwich", "tuna", "salmon",
@@ -1205,21 +1227,26 @@ func matchesAnyKeyword(name string, kws []string) bool {
 }
 
 // mealTypeBias returns a score modifier reflecting how well a food fits
-// the meal slot. Strongly negative for clear mismatches (beef for
-// breakfast), positive for clear matches.
+// the meal slot. Strongly negative for clear mismatches (beef or beans
+// for breakfast); positive for clear matches.
 func mealTypeBias(foodName, mealType string) float64 {
 	n := strings.ToLower(foodName)
 	switch mealType {
 	case "breakfast":
-		if matchesAnyKeyword(n, dinnerKeywords) {
+		// Hard penalty for the long tail of not-breakfast foods
+		// (legumes, dinner proteins, organ meats, raw vegetables).
+		if matchesAnyKeyword(n, notBreakfastKeywords) {
 			return -1.5
 		}
 		if matchesAnyKeyword(n, breakfastKeywords) {
 			return 0.6
 		}
+		// No match either way → modest negative. Forces a clear match
+		// (eggs, oats, yogurt, fruit) to be the typical pick.
+		return -0.3
 	case "dinner":
 		if matchesAnyKeyword(n, breakfastKeywords) {
-			return -0.6 // softer — pancakes for dinner is whatever
+			return -0.6
 		}
 		if matchesAnyKeyword(n, dinnerKeywords) || matchesAnyKeyword(n, lunchKeywords) {
 			return 0.4
@@ -1232,7 +1259,6 @@ func mealTypeBias(foodName, mealType string) float64 {
 			return 0.3
 		}
 	case "snack":
-		// Snacks are forgiving — small penalty for full-meal foods
 		if matchesAnyKeyword(n, dinnerKeywords) {
 			return -0.5
 		}
@@ -1554,6 +1580,27 @@ func (h *Handler) daily(w http.ResponseWriter, r *http.Request) {
 		Targets: targets, CaloriesBurned: burned,
 		NetCalories: totals.Calories - burned,
 	}
+	// Surplus / deficit: Oura is the gold standard when available (full
+	// daily TDEE captured by the ring). Falls back to the user's stored
+	// TDEE target, and finally just to the in-app cardio burn.
+	totalBurn := 0
+	source := "cardio"
+	if h.getDailyBurn != nil {
+		if ouraBurn, err := h.getDailyBurn(r.Context(), u.ID, start); err == nil && ouraBurn > 0 {
+			out.DailyBurnedOura = ouraBurn
+			totalBurn = ouraBurn
+			source = "oura"
+		}
+	}
+	if totalBurn == 0 && targets.TDEE > 0 {
+		totalBurn = targets.TDEE + burned // TDEE doesn't include logged cardio
+		source = "target"
+	}
+	if totalBurn == 0 {
+		totalBurn = burned
+	}
+	out.Surplus = totals.Calories - totalBurn
+	out.BurnSource = source
 	httpx.JSON(w, http.StatusOK, out)
 }
 

@@ -291,6 +291,26 @@ func (r *PostgresRepository) UpdateExercise(ctx context.Context, workoutID strin
 	return nil
 }
 
+// SwapExerciseName replaces the exercise name at (workout_id, position).
+// Used by the in-workout swap-with-similar flow — the user picks a new
+// movement, the row's name updates in place, the prescription
+// metadata (set type / warmups) is wiped because they may no longer
+// apply, and any already-logged sets are preserved.
+func (r *PostgresRepository) SwapExerciseName(ctx context.Context, workoutID string, position int, newName string) error {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE workout_exercises
+		SET name = $3, prescription = '{}'::jsonb
+		WHERE workout_id = $1 AND position = $2
+	`, workoutID, position, newName)
+	if err != nil {
+		return fmt.Errorf("swap exercise: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
 // LogSet records a per-set log entry. Idempotent on (workout_id,
 // exercise_position, set_number) — re-logging the same set overwrites
 // the previous values, so the front-end can let the user correct typos

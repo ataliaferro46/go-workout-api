@@ -212,6 +212,43 @@
   color: var(--text);
 }
 .custom-row-inputs button { padding: 4px 8px; font-size: 14px; }
+.custom-row-swap {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 1px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+.custom-row-swap:hover { color: var(--accent); border-color: var(--accent); }
+.custom-row-swap-picker {
+  margin-top: 6px;
+  padding: 6px;
+  background: rgba(139, 92, 246, 0.05);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 4px;
+}
+.custom-row-swap-picker .alt-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-bottom: 3px;
+}
+.custom-row-swap-picker .alt-option:hover {
+  border-color: var(--accent);
+  background: rgba(139, 92, 246, 0.08);
+}
+.custom-row-swap-picker .food-name { font-size: 12px; font-weight: 500; }
+.custom-row-swap-picker .food-macros { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); margin-top: 2px; }
 
 /* --- mode tabs (quick page) --- */
 .mode-tabs {

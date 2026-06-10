@@ -99,6 +99,15 @@ func (s *Service) LastSetsForExercise(ctx context.Context, userID, exerciseName 
 	return s.repo.LastSetsForExercise(ctx, userID, exerciseName)
 }
 
+// SwapExerciseName replaces the exercise at (workoutID, position) with
+// a different exercise name. Used by the mid-workout swap flow.
+func (s *Service) SwapExerciseName(ctx context.Context, workoutID string, position int, newName string) error {
+	if newName == "" {
+		return &domain.ValidationError{Message: "new exercise name required"}
+	}
+	return s.repo.SwapExerciseName(ctx, workoutID, position, newName)
+}
+
 // UpdateExercise patches the prescription for one exercise in an
 // in-progress workout. Used by inline editing on the live workout page.
 func (s *Service) UpdateExercise(ctx context.Context, workoutID string, position int, sets, reps int, weightKG float64, targetReps []int, prescription *domain.ExercisePrescription) error {

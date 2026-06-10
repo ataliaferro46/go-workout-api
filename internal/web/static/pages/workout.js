@@ -352,38 +352,61 @@
     });
   }
 
+  async function openWorkoutSwapPicker(workoutID, position, currentName, cardEl) {
+    // Remove any existing picker.
+    document.querySelectorAll('.swap-picker').forEach(p => p.remove());
+    const picker = document.createElement('div');
+    picker.className = 'swap-picker';
+    picker.innerHTML = '<div class="swap-picker-head">Find a replacement for <strong>' + UI.escape(currentName) + '</strong>:</div>' +
+      '<div class="swap-picker-body"><p class="muted">Loading similar exercises…</p></div>';
+    cardEl.appendChild(picker);
+    try {
+      const data = await API.get('/v1/exercises/alternatives?name=' + encodeURIComponent(currentName));
+      const alts = data.alternatives || [];
+      if (alts.length === 0) {
+        picker.querySelector('.swap-picker-body').innerHTML =
+          '<p class="muted">No similar exercises found. Make sure your equipment list isn\'t too restrictive.</p>' +
+          '<button class="btn btn-ghost swap-cancel-btn">Cancel</button>';
+      } else {
+        picker.querySelector('.swap-picker-body').innerHTML =
+          alts.map(a => {
+            const tag = a.compound ? 'compound' : 'isolation';
+            const region = a.region ? ' · ' + a.region.replace(/_/g,' ') : '';
+            return '<button class="alt-option" data-swap-to="' + UI.escape(a.name) + '">' +
+              '<div class="food-name">' + UI.escape(a.name) + '</div>' +
+              '<div class="food-macros">' + tag + region + '</div>' +
+            '</button>';
+          }).join('') +
+          '<button class="btn btn-ghost swap-cancel-btn">Cancel</button>';
+      }
+      picker.querySelectorAll('[data-swap-to]').forEach(opt => {
+        opt.addEventListener('click', async () => {
+          const newName = opt.dataset.swapTo;
+          opt.textContent = 'Swapping…'; opt.disabled = true;
+          try {
+            await API.post('/v1/workouts/' + encodeURIComponent(workoutID) +
+              '/exercises/' + position + '/swap', { name: newName });
+            await render(workoutID);
+          } catch (err) {
+            UI.showError(document.getElementById('error'), err);
+            picker.remove();
+          }
+        });
+      });
+      picker.querySelector('.swap-cancel-btn').addEventListener('click', () => picker.remove());
+    } catch (err) {
+      picker.querySelector('.swap-picker-body').innerHTML =
+        '<p class="muted">Could not load alternatives: ' + UI.escape(err.message || 'error') + '</p>';
+    }
+  }
+
   function attachHandlers(workoutID) {
     attachEditHandlers(workoutID);
     document.querySelectorAll('.ex-swap').forEach(btn => {
       btn.addEventListener('click', async () => {
         const exName = btn.dataset.exName;
-        const newName = prompt(
-          'Swap "' + exName + '" — type the start of the replacement exercise name (or cancel).',
-          ''
-        );
-        if (!newName) return;
-        // Find first library exercise whose name starts with the typed text
-        // (case-insensitive). For a richer picker we'd render alternatives
-        // (like /plans does), but this swap fires mid-workout where a fast
-        // text path is the right UX.
-        const match = Object.values(exerciseByName || {}).find(e =>
-          e.name.toLowerCase().startsWith(newName.toLowerCase())
-        );
-        if (!match) {
-          UI.showError(document.getElementById('error'),
-            { code: 'no_match', message: 'No exercise found starting with "' + newName + '".' });
-          return;
-        }
-        // Mutating the workout's stored exercise name in-place requires a
-        // backend endpoint we haven't built; for now we update the visible
-        // card and the last-time hint so the user can proceed.
-        const card = btn.closest('.ex-card');
-        card.querySelector('.ex-name').textContent = match.name;
-        card.setAttribute('data-ex-name', match.name);
-        card.querySelector('.ex-last-time').setAttribute('data-ex-last', match.name);
-        const ytURL = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(match.name + ' exercise form');
-        card.querySelector('.ex-demo').setAttribute('href', ytURL);
-        await loadLastTimeHints();
+        const position = parseInt(btn.dataset.position, 10);
+        await openWorkoutSwapPicker(workoutID, position, exName, btn.closest('.ex-card'));
       });
     });
     document.querySelectorAll('.set-log-btn').forEach(btn => {

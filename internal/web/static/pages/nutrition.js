@@ -58,11 +58,41 @@
       ring('Protein', Math.round(totals.protein_g), tP, 'g') +
       ring('Carbs',   Math.round(totals.carbs_g),   tC, 'g') +
       ring('Fat',     Math.round(totals.fat_g),     tF, 'g') +
-      '<div class="net-row">' +
-        '<div><span class="net-label">Burned:</span> ' + burned + ' kcal</div>' +
-        '<div><span class="net-label">Net:</span> ' + net + ' kcal</div>' +
-        '<div><span class="net-label">Remaining:</span> ' + Math.max(0, tCal - net) + ' kcal</div>' +
-      '</div>';
+      renderEnergyBalance();
+  }
+
+  function renderEnergyBalance() {
+    if (!dailyData) return '';
+    const consumed = dailyData.totals.calories;
+    const cardio = dailyData.calories_burned || 0;
+    const ouraBurn = dailyData.daily_burned_oura || 0;
+    const surplus = dailyData.surplus || 0;
+    const src = dailyData.burn_source || 'cardio';
+
+    const labelMap = {
+      oura:   'Oura TDEE',
+      target: 'Target TDEE',
+      cardio: 'Cardio only',
+    };
+    const balanceLabel = surplus >= 0 ? 'Surplus' : 'Deficit';
+    const balanceCls = surplus >= 0 ? 'bal-surplus' : 'bal-deficit';
+    const balanceVal = Math.abs(surplus);
+
+    let burnLine = '';
+    if (ouraBurn > 0) {
+      burnLine = '<div><span class="net-label">Total burn:</span> ' + ouraBurn + ' kcal <span class="net-src">(Oura)</span></div>';
+    } else if (src === 'target' && dailyData.targets.tdee) {
+      burnLine = '<div><span class="net-label">Est. TDEE:</span> ' + (dailyData.targets.tdee + cardio) + ' kcal <span class="net-src">(profile)</span></div>';
+    }
+    return '<div class="net-row energy-row">' +
+      '<div><span class="net-label">Eaten:</span> ' + consumed + ' kcal</div>' +
+      (cardio > 0 ? '<div><span class="net-label">Cardio:</span> ' + cardio + ' kcal</div>' : '') +
+      burnLine +
+      '<div class="balance-pill ' + balanceCls + '">' +
+        balanceLabel + ' ' + balanceVal + ' kcal' +
+        '<span class="net-src">via ' + labelMap[src] + '</span>' +
+      '</div>' +
+    '</div>';
   }
 
   function ring(label, val, target, unit) {

@@ -30,6 +30,7 @@ type Repository interface {
 	// workout (sets / reps / weight / target reps / set type). Used by
 	// the inline editor.
 	UpdateExercise(ctx context.Context, workoutID string, position int, sets, reps int, weightKG float64, targetReps []int, prescription *domain.ExercisePrescription) error
+	SwapExerciseName(ctx context.Context, workoutID string, position int, newName string) error
 }
 
 // InMemoryRepository is a concurrency-safe, in-memory Repository. The RWMutex
@@ -152,6 +153,24 @@ func eqInsensitive(a, b string) bool {
 		}
 	}
 	return true
+}
+
+// SwapExerciseName replaces the exercise name in-memory + wipes its
+// prescription metadata.
+func (r *InMemoryRepository) SwapExerciseName(ctx context.Context, workoutID string, position int, newName string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	w, ok := r.workouts[workoutID]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	if position < 0 || position >= len(w.Exercises) {
+		return domain.ErrNotFound
+	}
+	w.Exercises[position].Name = newName
+	w.Exercises[position].Prescription = nil
+	r.workouts[workoutID] = w
+	return nil
 }
 
 // UpdateExercise patches the in-memory exercise prescription at position.

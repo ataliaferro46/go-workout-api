@@ -46,6 +46,43 @@ func (h *Handler) Routes(mux *http.ServeMux, requireAuth func(http.Handler) http
 	mux.Handle("POST /v1/workouts/cardio", requireAuth(http.HandlerFunc(h.createCardio)))
 	mux.Handle("POST /v1/workouts/{id}/repeat", requireAuth(http.HandlerFunc(h.repeat)))
 	mux.Handle("PATCH /v1/workouts/{id}/exercises/{position}", requireAuth(http.HandlerFunc(h.updateExercise)))
+	mux.Handle("POST /v1/workouts/{id}/exercises/{position}/swap", requireAuth(http.HandlerFunc(h.swapExercise)))
+}
+
+func (h *Handler) swapExercise(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.UserFromContext(r.Context())
+	id := r.PathValue("id")
+	pos, err := strconv.Atoi(r.PathValue("position"))
+	if err != nil || pos < 0 {
+		httpx.Error(w, &domain.ValidationError{Message: "position must be a non-negative integer"})
+		return
+	}
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		httpx.Error(w, err)
+		return
+	}
+	existing, err := h.svc.Get(r.Context(), id)
+	if err != nil {
+		httpx.Error(w, err)
+		return
+	}
+	if existing.UserID != u.ID {
+		httpx.Error(w, domain.ErrNotFound)
+		return
+	}
+	if err := h.svc.SwapExerciseName(r.Context(), id, pos, req.Name); err != nil {
+		httpx.Error(w, err)
+		return
+	}
+	out, err := h.svc.Get(r.Context(), id)
+	if err != nil {
+		httpx.Error(w, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, out)
 }
 
 func (h *Handler) updateExercise(w http.ResponseWriter, r *http.Request) {

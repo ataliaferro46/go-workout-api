@@ -54,14 +54,21 @@ type NutritionTotals struct {
 }
 
 // NutritionDaily is the full daily view: targets, what was eaten, what
-// was burned via workouts (cardio sessions today), net calorie balance.
+// was burned, and the day's surplus / deficit. CaloriesBurned counts
+// cardio sessions logged in the app; DailyBurnedOura is the user's full
+// TDEE (BMR + activity) pulled from their Oura ring when connected;
+// Surplus/Deficit uses Oura's number when available, otherwise falls
+// back to the calorie target as a baseline.
 type NutritionDaily struct {
-	Date          time.Time          `json:"date"`
-	Logs          []FoodLog          `json:"logs"`
-	Totals        NutritionTotals    `json:"totals"`
-	Targets       NutritionTargets   `json:"targets"`
-	CaloriesBurned int               `json:"calories_burned"`
-	NetCalories   int                `json:"net_calories"` // consumed - burned
+	Date            time.Time        `json:"date"`
+	Logs            []FoodLog        `json:"logs"`
+	Totals          NutritionTotals  `json:"totals"`
+	Targets         NutritionTargets `json:"targets"`
+	CaloriesBurned  int              `json:"calories_burned"`           // cardio sessions logged
+	DailyBurnedOura int              `json:"daily_burned_oura,omitempty"` // total TDEE from Oura
+	NetCalories     int              `json:"net_calories"`               // consumed - cardio burn
+	Surplus         int              `json:"surplus"`                    // consumed - total burn (positive = surplus)
+	BurnSource      string           `json:"burn_source,omitempty"`      // "oura" | "target" | "cardio"
 }
 
 // MealPlan is a persisted meal plan (single-day or multi-day) the user

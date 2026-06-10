@@ -126,6 +126,11 @@ func main() {
 			}
 			return c.User, nil
 		})
+		// Wearable-backed daily calorie burn (currently Oura). Optional —
+		// nutrition gracefully falls back to TDEE estimate when nil.
+		if deps.biometricsSvc != nil {
+			nutritionHandler.SetDailyBurnFetcher(deps.biometricsSvc.DailyCaloriesBurned)
+		}
 		nutritionHandler.Routes(mux, requireAuth)
 	}
 

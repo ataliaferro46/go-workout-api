@@ -149,6 +149,26 @@ type IntensitySummary struct {
 	ComputedAt       time.Time     `json:"computed_at"`
 }
 
+// DailyCaloriesBurned returns the user's total daily calorie burn (BMR
+// + activity) for the given date, pulled from Oura. Returns 0 + nil
+// when no provider is connected — the caller treats that as "fall back
+// to TDEE estimate." Returns 0 + error only for real failures.
+func (s *Service) DailyCaloriesBurned(ctx context.Context, userID string, date time.Time) (int, error) {
+	tok, err := s.tokens.Load(ctx, userID, "oura")
+	if err != nil {
+		return 0, nil // no Oura → not an error, just no data
+	}
+	p, err := s.registry.Lookup("oura")
+	if err != nil {
+		return 0, nil
+	}
+	oura, ok := p.(*OuraProvider)
+	if !ok {
+		return 0, nil
+	}
+	return oura.DailyCalories(ctx, tok.AccessToken, date)
+}
+
 // IntensityForWindow fetches HR samples from the user's connected
 // provider (Oura today) between start and end, returning summary stats.
 // Returns an empty summary (and no error) if the user has no provider

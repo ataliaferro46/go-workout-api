@@ -91,6 +91,41 @@
 .set-target-hint { font-family: var(--font-mono); font-size: 9px; color: var(--text-faint); margin-left: 4px; }
 .dose-static { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); }
 
+/* Swap picker (in-workout) */
+.swap-picker {
+  margin-top: 10px;
+  padding: 10px;
+  background: rgba(139, 92, 246, 0.05);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  border-radius: 6px;
+}
+.swap-picker-head {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.swap-picker-head strong { color: var(--text); text-transform: none; letter-spacing: 0; }
+.swap-picker-body { display: flex; flex-direction: column; gap: 4px; }
+.swap-picker .alt-option {
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.swap-picker .alt-option:hover {
+  border-color: var(--accent);
+  background: rgba(139, 92, 246, 0.08);
+}
+.swap-picker .food-name { font-size: 13px; font-weight: 500; }
+.swap-picker .food-macros { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); margin-top: 2px; }
+.swap-cancel-btn { margin-top: 4px; }
+
 /* Unit toggle */
 .unit-toggle {
   display: flex;

@@ -194,6 +194,47 @@ func (p *OuraProvider) VerifyWebhook(headers http.Header, body []byte) error {
 	return nil
 }
 
+// DailyCalories returns Oura's total daily calorie burn for the given
+// date — BMR + all activity captured by the ring. This is the closest
+// thing to "real" daily expenditure most apps can get without lab
+// metabolic testing. Returned as int; 0 when the day has no synced
+// activity row.
+func (p *OuraProvider) DailyCalories(ctx context.Context, accessToken string, date time.Time) (int, error) {
+	dateStr := date.UTC().Format("2006-01-02")
+	q := url.Values{
+		"start_date": {dateStr},
+		"end_date":   {dateStr},
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		p.cfg.APIBaseURL+"/usercollection/daily_activity?"+q.Encode(), nil)
+	if err != nil {
+		return 0, fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := p.cfg.HTTPClient.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("get daily activity: %w", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("oura daily_activity: %d %s", resp.StatusCode, string(body))
+	}
+	var page struct {
+		Data []struct {
+			TotalCalories  int `json:"total_calories"`
+			ActiveCalories int `json:"active_calories"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &page); err != nil {
+		return 0, fmt.Errorf("decode daily activity: %w", err)
+	}
+	if len(page.Data) == 0 {
+		return 0, nil
+	}
+	return page.Data[0].TotalCalories, nil
+}
+
 // HRSample is one heart-rate sample returned by the Oura HR endpoint.
 // Source tags Oura's classification: "rest", "awake", "live", "session"
 // (live workout), "asleep". Any sample within a workout time window

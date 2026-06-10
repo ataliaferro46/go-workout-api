@@ -60,11 +60,16 @@
             refreshList();
           });
         });
+        list.querySelectorAll('[data-swap-row]').forEach(b => {
+          b.addEventListener('click', () => openSwapForRow(parseInt(b.dataset.swapRow, 10)));
+        });
       }
 
       function renderRow(ex, idx) {
         return '<div class="custom-row">' +
-          '<div class="custom-row-name">' + UI.escape(ex.name) + '</div>' +
+          '<div class="custom-row-name">' + UI.escape(ex.name) +
+            ' <button class="custom-row-swap" data-swap-row="' + idx + '" title="Swap with similar">↔</button>' +
+          '</div>' +
           '<div class="custom-row-inputs">' +
             '<input type="number" min="1" value="' + ex.sets + '" data-set-input="' + idx + '" placeholder="sets" class="input">' +
             '<span>×</span>' +
@@ -73,7 +78,39 @@
             '<input type="number" min="0" step="0.5" value="' + ex.weight_kg + '" data-weight-input="' + idx + '" placeholder="kg" class="input">' +
             '<button class="btn btn-ghost" data-remove="' + idx + '">×</button>' +
           '</div>' +
+          '<div class="custom-row-swap-picker hidden" data-swap-picker="' + idx + '"></div>' +
         '</div>';
+      }
+
+      async function openSwapForRow(idx) {
+        const ex = picked[idx];
+        if (!ex) return;
+        const pickerEl = list.querySelector('[data-swap-picker="' + idx + '"]');
+        if (!pickerEl) return;
+        pickerEl.classList.remove('hidden');
+        pickerEl.innerHTML = '<p class="form-help">Finding alternatives…</p>';
+        try {
+          const data = await API.get('/v1/exercises/alternatives?name=' + encodeURIComponent(ex.name));
+          const alts = data.alternatives || [];
+          if (alts.length === 0) {
+            pickerEl.innerHTML = '<p class="form-help">No similar exercises in your library.</p>';
+            return;
+          }
+          pickerEl.innerHTML = alts.map(a =>
+            '<button class="alt-option" data-swap-pick="' + UI.escape(a.name) + '">' +
+              '<div class="food-name">' + UI.escape(a.name) + '</div>' +
+              '<div class="food-macros">' + (a.compound ? 'compound' : 'isolation') +
+                (a.region ? ' · ' + a.region.replace(/_/g,' ') : '') + '</div>' +
+            '</button>').join('');
+          pickerEl.querySelectorAll('[data-swap-pick]').forEach(b => {
+            b.addEventListener('click', () => {
+              picked[idx].name = b.dataset.swapPick;
+              refreshList();
+            });
+          });
+        } catch (err) {
+          pickerEl.innerHTML = '<p class="form-help">Could not load alternatives.</p>';
+        }
       }
 
       let st;
