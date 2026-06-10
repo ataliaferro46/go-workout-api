@@ -156,11 +156,22 @@
       const p = await API.get('/v1/plans/' + encodeURIComponent(planID));
       const day = (p.days || []).find(d => d.index === dayIdx);
       if (!day) throw new Error('day not found');
+      // Carry the planning metadata through so the live workout view
+      // shows set type / warmup / rest period — matching what you saw on
+      // the /plans page.
       const exercises = (day.exercises || []).map(ex => ({
         name: (ex.exercise && ex.exercise.name) || 'exercise',
         sets: ex.sets || 0,
         reps: Math.round(((ex.reps_low || 0) + (ex.reps_high || 0)) / 2),
         weight_kg: 0,
+        prescription: {
+          set_type:      ex.set_type || '',
+          set_type_note: ex.set_type_note || '',
+          warmups:       ex.warmups || [],
+          reps_low:      ex.reps_low || 0,
+          reps_high:     ex.reps_high || 0,
+          rest_seconds:  ex.rest_seconds || 0,
+        },
       }));
       const name = day.name + (day.weekday ? ' (' + day.weekday + ')' : '');
       const w = await API.post('/v1/workouts', {

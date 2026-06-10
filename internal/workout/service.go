@@ -99,6 +99,15 @@ func (s *Service) LastSetsForExercise(ctx context.Context, userID, exerciseName 
 	return s.repo.LastSetsForExercise(ctx, userID, exerciseName)
 }
 
+// UpdateExercise patches the prescription for one exercise in an
+// in-progress workout. Used by inline editing on the live workout page.
+func (s *Service) UpdateExercise(ctx context.Context, workoutID string, position int, sets, reps int, weightKG float64, targetReps []int, prescription *domain.ExercisePrescription) error {
+	if sets < 0 || reps < 0 || weightKG < 0 {
+		return &domain.ValidationError{Message: "sets / reps / weight must be ≥ 0"}
+	}
+	return s.repo.UpdateExercise(ctx, workoutID, position, sets, reps, weightKG, targetReps, prescription)
+}
+
 // LogSet records a per-set log entry on an in-progress workout.
 // Idempotent on (workoutID, exercisePosition, setNumber).
 func (s *Service) LogSet(ctx context.Context, workoutID string, exercisePosition, setNumber, reps int, weightKG float64) error {

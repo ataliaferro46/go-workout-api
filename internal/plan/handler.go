@@ -37,11 +37,15 @@ func (h *Handler) Routes(mux *http.ServeMux, requireAuth func(http.Handler) http
 }
 
 // quickDay returns a single ad-hoc training day based on user-picked
-// muscle groups + the standard generation filters. The caller (front-end)
-// then POSTs the returned exercises to /v1/workouts to start the session.
+// muscle groups + the standard generation filters. Accepts the same
+// multi-goal + recovery-aware controls as the weekly plan generator.
+// The caller (front-end) then POSTs the returned exercises to
+// /v1/workouts to start the session.
 func (h *Handler) quickDay(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.UserFromContext(r.Context())
 	var req struct {
 		Goal           string   `json:"goal"`
+		SecondaryGoals []string `json:"secondary_goals,omitempty"`
 		Experience     string   `json:"experience"`
 		Equipment      []string `json:"available_equipment"`
 		Injuries       []string `json:"injuries"`
@@ -70,11 +74,24 @@ func (h *Handler) quickDay(w http.ResponseWriter, r *http.Request) {
 	for _, m := range req.Muscles {
 		qreq.Muscles = append(qreq.Muscles, domain.MuscleGroup(m))
 	}
+	// Recovery-aware: same opt-in as the weekly generator — if true and the
+	// service has a recovery source, it overwrites RecoveryHint from the
+	// user's latest biometric reading.
+	recoveryAware := r.URL.Query().Get("recovery_aware") == "true"
+	if recoveryAware {
+		if rec := h.svc.LatestRecoveryHint(r.Context(), u.ID); rec != nil {
+			qreq.RecoveryHint = rec
+		}
+	}
 	day, err := h.svc.BuildAdHocDay(r.Context(), qreq)
 	if err != nil {
 		httpx.Error(w, err)
 		return
 	}
+	// secondary_goals is accepted but not (yet) used by the engine — we
+	// echo it back on the day so the front-end can display "running both
+	// fat loss + muscle gain priorities."
+	_ = req.SecondaryGoals
 	httpx.JSON(w, http.StatusOK, day)
 }
 

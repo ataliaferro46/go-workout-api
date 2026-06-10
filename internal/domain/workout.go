@@ -38,15 +38,34 @@ type CardioSession struct {
 }
 
 // LoggedExercise is a movement the user actually performed in a session.
-// Sets / Reps / WeightKG (the original flat fields) are kept for backward
-// compatibility — they summarize the prescription. LoggedSets is the
-// per-set ground truth populated as the user logs each set in real time.
+// Sets / Reps / WeightKG (the original flat fields) summarize the
+// prescription. LoggedSets is the per-set ground truth populated as the
+// user logs each set in real time. TargetReps, when populated, holds a
+// per-set rep target for pyramid / variable-rep schemes (e.g. 10, 8, 6).
+// Prescription carries the rich planning metadata (set type, warmups,
+// rest period) when the workout was started from a planned day; null for
+// ad-hoc workouts.
 type LoggedExercise struct {
-	Name       string      `json:"name"`
-	Sets       int         `json:"sets"`     // prescribed
-	Reps       int         `json:"reps"`     // prescribed (mid of range)
-	WeightKG   float64     `json:"weight_kg"`
-	LoggedSets []LoggedSet `json:"logged_sets,omitempty"`
+	Name         string             `json:"name"`
+	Sets         int                `json:"sets"`     // prescribed working-set count
+	Reps         int                `json:"reps"`     // prescribed (mid of range)
+	WeightKG     float64            `json:"weight_kg"`
+	TargetReps   []int              `json:"target_reps,omitempty"`
+	Prescription *ExercisePrescription `json:"prescription,omitempty"`
+	LoggedSets   []LoggedSet        `json:"logged_sets,omitempty"`
+}
+
+// ExercisePrescription is the planning metadata carried over from the
+// generated plan so the live workout view matches what the user saw on
+// /plans: set type variants (AMRAP / drop set / 21s / superset), warmup
+// ramp, and rest period.
+type ExercisePrescription struct {
+	SetType     string      `json:"set_type,omitempty"`
+	SetTypeNote string      `json:"set_type_note,omitempty"`
+	Warmups     []WarmupSet `json:"warmups,omitempty"`
+	RepsLow     int         `json:"reps_low,omitempty"`
+	RepsHigh    int         `json:"reps_high,omitempty"`
+	RestSeconds int         `json:"rest_seconds,omitempty"`
 }
 
 // LoggedSet is one completed set with the actual reps + weight the user

@@ -53,6 +53,43 @@
 .ex-last-time:empty { display: none; }
 .last-label { text-transform: uppercase; letter-spacing: 0.05em; }
 .last-vals { color: var(--text-dim); }
+.ex-edit { font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); background: transparent; border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px; cursor: pointer; }
+.ex-edit:hover { color: var(--accent); border-color: var(--accent); }
+.ex-edit-form {
+  margin-top: 10px;
+  padding: 10px;
+  background: rgba(139, 92, 246, 0.05);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 6px;
+}
+.ex-edit-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.ex-edit-row label {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+}
+.ex-edit-row input {
+  margin-top: 2px;
+  width: 80px;
+  padding: 4px 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.ex-edit-row input.ex-edit-target-reps { width: 110px; }
+.ex-edit-hint { margin: 6px 0 0; font-size: 11px; color: var(--text-faint); }
+.set-target-hint { font-family: var(--font-mono); font-size: 9px; color: var(--text-faint); margin-left: 4px; }
+.dose-static { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); }
 
 /* Unit toggle */
 .unit-toggle {

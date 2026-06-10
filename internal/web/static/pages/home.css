@@ -134,6 +134,33 @@
   border-radius: 4px;
 }
 
+/* --- custom workout builder --- */
+.custom-row {
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--border);
+}
+.custom-row:last-child { border-bottom: none; }
+.custom-row-name {
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+.custom-row-inputs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.custom-row-inputs input {
+  width: 56px;
+  padding: 4px 6px;
+  font-size: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+}
+.custom-row-inputs button { padding: 4px 8px; font-size: 14px; }
+
 /* --- mode tabs (quick page) --- */
 .mode-tabs {
   display: flex;

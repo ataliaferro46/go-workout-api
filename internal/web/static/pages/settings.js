@@ -27,7 +27,41 @@
     handleFlashFromQuery();
     await loadProviders();
     await loadReadings();
+    await loadDietPreferences();
+    wireDietSave();
   });
+
+  async function loadDietPreferences() {
+    try {
+      const data = await API.get('/v1/nutrition/preferences');
+      document.getElementById('allergies-input').value = (data.allergies || []).join(', ');
+      document.getElementById('dislikes-input').value = (data.disliked_foods || []).join(', ');
+    } catch (e) { /* not authenticated yet — skip */ }
+  }
+
+  function wireDietSave() {
+    const btn = document.getElementById('diet-save-btn');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      const parse = s => s.split(',').map(x => x.trim()).filter(x => x.length > 0);
+      const allergies = parse(document.getElementById('allergies-input').value);
+      const disliked = parse(document.getElementById('dislikes-input').value);
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+      try {
+        await API.fetch('/v1/nutrition/preferences', {
+          method: 'PATCH',
+          body: JSON.stringify({ allergies: allergies, disliked_foods: disliked }),
+        });
+        btn.textContent = '✓ Saved';
+        setTimeout(() => { btn.textContent = 'Save preferences'; btn.disabled = false; }, 1200);
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = 'Save preferences';
+        UI.showError(document.getElementById('flash-error'), err);
+      }
+    });
+  }
 
   function renderProfile(user) {
     document.getElementById('profile-email').textContent = user.email;
@@ -37,23 +71,24 @@
     if (idEl) idEl.textContent = user.id;
     const form = document.getElementById('profile-form');
     if (!form) return;
-    if (user.height_cm) form.height_cm.value = user.height_cm;
-    if (user.weight_kg) form.weight_kg.value = user.weight_kg;
+
+    // Set up the imperial/metric toggle
+    syncProfileUnitButtons();
+    document.getElementById('profile-imperial-btn').onclick = () => switchProfileUnits('imperial', user);
+    document.getElementById('profile-metric-btn').onclick = () => switchProfileUnits('metric', user);
+
+    // Populate fields with whatever the user has stored (DB is metric).
+    fillProfileFields(user);
+
     if (user.birth_date) form.birth_date.value = String(user.birth_date).slice(0, 10);
     if (user.sex) form.sex.value = user.sex;
     updateBMI(user.height_cm, user.weight_kg);
-    form.addEventListener('submit', async (e) => {
+
+    // Use onsubmit (rather than addEventListener) so re-rendering doesn't
+    // double-bind the handler each time.
+    form.onsubmit = async (e) => {
       e.preventDefault();
-      const fd = new FormData(form);
-      const body = {};
-      const h = parseInt(fd.get('height_cm'), 10);
-      const w = parseFloat(fd.get('weight_kg'));
-      if (h > 0) body.height_cm = h;
-      if (w > 0) body.weight_kg = w;
-      const bd = fd.get('birth_date');
-      if (bd) body.birth_date = bd;
-      const sx = fd.get('sex');
-      if (sx) body.sex = sx;
+      const body = collectProfileBody();
       try {
         const data = await API.fetch('/v1/auth/profile', {
           method: 'PATCH', body: JSON.stringify(body),
@@ -65,7 +100,61 @@
       } catch (err) {
         UI.showError(document.getElementById('flash-error'), err);
       }
-    });
+    };
+  }
+
+  function syncProfileUnitButtons() {
+    const sys = UNITS.system();
+    document.getElementById('profile-imperial-btn').classList.toggle('active', sys === 'imperial');
+    document.getElementById('profile-metric-btn').classList.toggle('active', sys === 'metric');
+    document.getElementById('height-imperial').classList.toggle('hidden', sys !== 'imperial');
+    document.getElementById('height-metric').classList.toggle('hidden', sys !== 'metric');
+    document.getElementById('weight-unit-label').textContent =
+      sys === 'imperial' ? '(lbs)' : '(kg)';
+  }
+
+  function switchProfileUnits(sys, user) {
+    UNITS.setSystem(sys);
+    syncProfileUnitButtons();
+    fillProfileFields(user);
+  }
+
+  function fillProfileFields(user) {
+    const sys = UNITS.system();
+    if (user.height_cm) {
+      if (sys === 'imperial') {
+        const ftIn = UNITS.cmToFtIn(user.height_cm);
+        document.getElementById('height-ft').value = ftIn.ft;
+        document.getElementById('height-in').value = ftIn.inches;
+      } else {
+        document.getElementById('height-cm').value = user.height_cm;
+      }
+    }
+    if (user.weight_kg) {
+      document.getElementById('weight-input').value = UNITS.kgToDisplay(user.weight_kg);
+    }
+  }
+
+  function collectProfileBody() {
+    const form = document.getElementById('profile-form');
+    const fd = new FormData(form);
+    const body = {};
+    const sys = UNITS.system();
+    if (sys === 'imperial') {
+      const ft = document.getElementById('height-ft').value;
+      const inches = document.getElementById('height-in').value;
+      if (ft || inches) body.height_cm = UNITS.ftInToCm(ft, inches);
+    } else {
+      const h = parseInt(document.getElementById('height-cm').value, 10);
+      if (h > 0) body.height_cm = h;
+    }
+    const wInput = parseFloat(document.getElementById('weight-input').value);
+    if (wInput > 0) body.weight_kg = UNITS.displayToKg(wInput);
+    const bd = fd.get('birth_date');
+    if (bd) body.birth_date = bd;
+    const sx = fd.get('sex');
+    if (sx) body.sex = sx;
+    return body;
   }
 
   function updateBMI(heightCM, weightKG) {

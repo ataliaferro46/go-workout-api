@@ -82,14 +82,11 @@
     }
   }
 
-  function unitLabel() { return localStorage.getItem('wapi.unit') === 'lbs' ? 'lbs' : 'kg'; }
-  function kgToDisplay(kg) {
-    if (kg == null || kg === 0) return 0;
-    return unitLabel() === 'lbs' ? +(kg * 2.20462).toFixed(1) : +kg.toFixed(1);
-  }
-  function displayToKg(val) {
-    return unitLabel() === 'lbs' ? +(val / 2.20462).toFixed(2) : +val;
-  }
+  // Per-page aliases of the global UNITS helpers; default behavior is
+  // imperial (lbs) since UNITS.system() defaults to 'imperial'.
+  function unitLabel() { return UNITS.weightLabel(); }
+  function kgToDisplay(kg) { return UNITS.kgToDisplay(kg); }
+  function displayToKg(val) { return UNITS.displayToKg(val); }
 
   function renderExercise(ex, position) {
     const setRows = [];
@@ -103,6 +100,22 @@
     const ytURL = 'https://www.youtube.com/results?search_query=' +
       encodeURIComponent(ex.name + ' exercise form');
 
+    // Render the prescription badges (set type, warmups, rep range) so
+    // the live workout mirrors what was on the plan view. Each comes
+    // from ex.prescription when the workout was started from a plan.
+    const presc = ex.prescription || {};
+    const setTypeBadge = renderActiveSetTypeBadge(presc);
+    const warmupRow = renderActiveWarmupRow(presc);
+    const repRange = (presc.reps_low > 0 && presc.reps_high > 0)
+      ? presc.reps_low + '-' + presc.reps_high
+      : (ex.reps || '?');
+    const restNote = presc.rest_seconds > 0
+      ? ' · rest ' + presc.rest_seconds + 's'
+      : '';
+    // target_reps lets the user prescribe variable reps per set (e.g.,
+    // a pyramid 10, 8, 6). If empty, every set uses the same target.
+    const targetReps = (ex.target_reps && ex.target_reps.length > 0) ? ex.target_reps : null;
+
     for (let n = 1; n <= targetSets; n++) {
       const s = loggedBySet[n];
       const done = !!s;
@@ -111,11 +124,17 @@
         ? '<input type="hidden" class="set-weight" value="0">'
         : '<span class="set-x">×</span>' +
           '<input type="number" class="set-weight" placeholder="' + unit + '" value="' + wVal + '" min="0" step="0.5">';
+      // Per-set target reps: if target_reps is set, show that set's target;
+      // otherwise show the prescription's rep range hint.
+      const setTargetHint = targetReps && targetReps[n-1]
+        ? ' target ' + targetReps[n-1]
+        : (presc.reps_low > 0 ? ' target ' + presc.reps_low + '-' + presc.reps_high : '');
+      const repsPlaceholder = targetReps && targetReps[n-1] ? targetReps[n-1] : 'reps';
       setRows.push(
         '<div class="set-row ' + (done ? 'set-done' : '') + (bw ? ' bw' : '') + '" data-set="' + n + '" data-pos="' + position + '">' +
-          '<div class="set-num">Set ' + n + '</div>' +
+          '<div class="set-num">Set ' + n + '<span class="set-target-hint">' + UI.escape(setTargetHint) + '</span></div>' +
           '<div class="set-inputs">' +
-            '<input type="number" class="set-reps" placeholder="reps" value="' + (done ? s.reps : '') + '" min="0">' +
+            '<input type="number" class="set-reps" placeholder="' + repsPlaceholder + '" value="' + (done ? s.reps : '') + '" min="0">' +
             weightInput +
             '<button class="set-log-btn">' + (done ? '✓ logged' : 'log set') + '</button>' +
           '</div>' +
@@ -124,8 +143,9 @@
       );
     }
 
+    const targetSetsStr = targetReps ? targetReps.join(',') : '';
     const doseLine = ex.sets > 0
-      ? ex.sets + ' × ' + (ex.reps || '?') + ' reps prescribed'
+      ? '<span class="dose-static">' + ex.sets + ' × ' + repRange + restNote + '</span>'
       : '';
     return '<div class="ex-card" data-ex-name="' + UI.escape(ex.name) + '" data-position="' + position + '">' +
       '<div class="ex-head">' +
@@ -135,13 +155,51 @@
             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>' +
             ' demo' +
           '</a>' +
+          '<button class="ex-edit" data-edit-position="' + position + '" title="Edit prescription">✎ edit</button>' +
           '<button class="ex-swap" data-ex-name="' + UI.escape(ex.name) + '" data-position="' + position + '">↔ swap</button>' +
         '</div>' +
         (doseLine ? '<div class="ex-dose">' + doseLine + '</div>' : '') +
         '<div class="ex-last-time" data-ex-last="' + UI.escape(ex.name) + '"></div>' +
+        warmupRow +
+        setTypeBadge +
+        // Inline editor (hidden by default): sets / target reps / weight
+        '<div class="ex-edit-form hidden" data-edit-form="' + position + '">' +
+          '<div class="ex-edit-row">' +
+            '<label>Sets <input type="number" class="ex-edit-sets" value="' + ex.sets + '" min="1" max="10"></label>' +
+            '<label>Reps <input type="text" class="ex-edit-target-reps" placeholder="e.g. 10,8,6" value="' + UI.escape(targetSetsStr) + '"></label>' +
+            '<button class="btn btn-primary ex-edit-save" data-save-position="' + position + '">Save</button>' +
+            '<button class="btn btn-ghost ex-edit-cancel" data-cancel-position="' + position + '">Cancel</button>' +
+          '</div>' +
+          '<p class="ex-edit-hint">Type comma-separated reps (10,8,6) for variable schemes, or a single number for uniform.</p>' +
+        '</div>' +
       '</div>' +
       '<div class="set-rows">' + setRows.join('') + '</div>' +
     '</div>';
+  }
+
+  function renderActiveSetTypeBadge(presc) {
+    if (!presc.set_type || presc.set_type === 'standard') return '';
+    const meta = {
+      amrap:        { label: 'AMRAP last set', cls: 'st-amrap' },
+      drop_set:     { label: 'Drop set finish', cls: 'st-drop' },
+      twenty_ones:  { label: '21s', cls: 'st-21s' },
+      superset:     { label: 'Superset', cls: 'st-superset' },
+    }[presc.set_type];
+    if (!meta) return '';
+    const note = presc.set_type_note ? '<span class="set-type-note">' + UI.escape(presc.set_type_note) + '</span>' : '';
+    return '<div class="set-type-badge ' + meta.cls + '">' +
+      '<span class="set-type-label">' + meta.label + '</span>' + note +
+    '</div>';
+  }
+
+  function renderActiveWarmupRow(presc) {
+    const ws = presc.warmups || [];
+    if (ws.length === 0) return '';
+    const chips = ws.map(w => {
+      const pct = Math.round(w.percent_of_working * 100);
+      return '<span class="warmup-chip">' + w.reps + ' × ' + pct + '%</span>';
+    }).join('');
+    return '<div class="exercise-warmup"><span class="warmup-label">warmup</span>' + chips + '</div>';
   }
 
   async function loadIntensity(workoutID) {
@@ -200,7 +258,7 @@
       '</div>' +
       '<div class="intensity-stats">' +
         tile('Duration', cs.duration_minutes + ' min') +
-        (cs.distance_km > 0 ? tile('Distance', cs.distance_km.toFixed(2) + ' km') : '') +
+        (cs.distance_km > 0 ? tile('Distance', UNITS.kmToDisplay(cs.distance_km) + ' ' + UNITS.distanceLabel()) : '') +
         tile('Calories', cs.calories || '—') +
       '</div>' +
       (caloriesNote ? '<p class="cardio-note">' + UI.escape(caloriesNote) + '</p>' : '') +
@@ -208,17 +266,17 @@
   }
 
   function renderUnitToggle() {
-    const unit = unitLabel();
+    const sys = UNITS.system();
     return '<div class="unit-toggle">' +
-      '<button class="unit-btn ' + (unit === 'kg' ? 'active' : '') + '" data-unit="kg">kg</button>' +
-      '<button class="unit-btn ' + (unit === 'lbs' ? 'active' : '') + '" data-unit="lbs">lbs</button>' +
+      '<button class="unit-btn ' + (sys === 'imperial' ? 'active' : '') + '" data-sys="imperial">lbs</button>' +
+      '<button class="unit-btn ' + (sys === 'metric' ? 'active' : '') + '" data-sys="metric">kg</button>' +
     '</div>';
   }
 
   function attachUnitToggle(workoutID) {
     document.querySelectorAll('.unit-btn').forEach(b => {
       b.addEventListener('click', () => {
-        localStorage.setItem('wapi.unit', b.dataset.unit);
+        UNITS.setSystem(b.dataset.sys);
         render(workoutID); // re-render with new unit
       });
     });
@@ -245,7 +303,57 @@
     }));
   }
 
+  function attachEditHandlers(workoutID) {
+    document.querySelectorAll('[data-edit-position]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const pos = btn.dataset.editPosition;
+        const form = document.querySelector('[data-edit-form="' + pos + '"]');
+        if (form) form.classList.toggle('hidden');
+      });
+    });
+    document.querySelectorAll('[data-cancel-position]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const pos = btn.dataset.cancelPosition;
+        const form = document.querySelector('[data-edit-form="' + pos + '"]');
+        if (form) form.classList.add('hidden');
+      });
+    });
+    document.querySelectorAll('[data-save-position]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const pos = parseInt(btn.dataset.savePosition, 10);
+        const form = document.querySelector('[data-edit-form="' + pos + '"]');
+        const setsInput = form.querySelector('.ex-edit-sets');
+        const targetInput = form.querySelector('.ex-edit-target-reps');
+        const sets = parseInt(setsInput.value, 10) || 1;
+        const repsStr = targetInput.value.trim();
+        let target_reps = [];
+        let reps = 0;
+        if (repsStr.includes(',')) {
+          target_reps = repsStr.split(',').map(s => parseInt(s.trim(), 10)).filter(n => n > 0);
+          reps = target_reps[0] || 0;
+        } else if (repsStr) {
+          reps = parseInt(repsStr, 10) || 0;
+        }
+        btn.disabled = true;
+        try {
+          await API.fetch('/v1/workouts/' + encodeURIComponent(workoutID) +
+            '/exercises/' + pos, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              sets: sets, reps: reps, weight_kg: 0, target_reps: target_reps,
+            }),
+          });
+          await render(workoutID);
+        } catch (err) {
+          btn.disabled = false;
+          UI.showError(document.getElementById('error'), err);
+        }
+      });
+    });
+  }
+
   function attachHandlers(workoutID) {
+    attachEditHandlers(workoutID);
     document.querySelectorAll('.ex-swap').forEach(btn => {
       btn.addEventListener('click', async () => {
         const exName = btn.dataset.exName;

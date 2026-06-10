@@ -35,14 +35,25 @@
         <div class="profile-value" id="profile-email">loading…</div>
       </div>
       <form id="profile-form" class="profile-edit">
+        <div class="unit-toggle" style="margin-bottom: 10px;">
+          <button type="button" class="unit-btn" id="profile-imperial-btn" data-sys="imperial">Imperial</button>
+          <button type="button" class="unit-btn" id="profile-metric-btn" data-sys="metric">Metric</button>
+        </div>
         <div class="profile-edit-grid">
-          <div class="field">
-            <label>Height (cm)</label>
-            <input class="input" type="number" name="height_cm" min="50" max="250" step="1">
+          <div class="field" id="height-imperial">
+            <label>Height</label>
+            <div style="display: flex; gap: 6px;">
+              <input class="input" type="number" id="height-ft" min="3" max="8" step="1" placeholder="ft" style="width: 70px;">
+              <input class="input" type="number" id="height-in" min="0" max="11" step="1" placeholder="in" style="width: 70px;">
+            </div>
           </div>
-          <div class="field">
-            <label>Weight (kg)</label>
-            <input class="input" type="number" name="weight_kg" min="20" max="300" step="0.1">
+          <div class="field hidden" id="height-metric">
+            <label>Height (cm)</label>
+            <input class="input" type="number" id="height-cm" min="50" max="250" step="1">
+          </div>
+          <div class="field" id="weight-row">
+            <label>Weight <span id="weight-unit-label">(lbs)</span></label>
+            <input class="input" type="number" id="weight-input" min="20" max="700" step="0.1">
           </div>
           <div class="field">
             <label>Birth date</label>
@@ -75,6 +86,22 @@
       <div class="card padded" style="grid-column: 1 / -1;">
         <p style="margin: 0; color: var(--text-dim);">Loading integrations…</p>
       </div>
+    </div>
+  </section>
+
+  <section class="settings-section">
+    <h3 class="section-title">Diet preferences</h3>
+    <div class="card padded">
+      <p class="section-sub">Foods matching these terms are filtered out of meal-plan suggestions.</p>
+      <div class="field">
+        <label>Allergies <span class="hint">comma-separated (e.g. peanut, shellfish, dairy)</span></label>
+        <input class="input" type="text" id="allergies-input" placeholder="peanut, shellfish, gluten">
+      </div>
+      <div class="field">
+        <label>Disliked foods <span class="hint">comma-separated</span></label>
+        <input class="input" type="text" id="dislikes-input" placeholder="liver, brussels sprouts">
+      </div>
+      <button class="btn btn-primary" id="diet-save-btn">Save preferences</button>
     </div>
   </section>
 

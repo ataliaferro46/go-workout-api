@@ -24,9 +24,28 @@
   </section>
 
   <div class="mode-tabs">
-    <button class="mode-tab active" data-mode="strength">Strength</button>
+    <button class="mode-tab active" data-mode="strength">Auto-build</button>
+    <button class="mode-tab" data-mode="custom">Custom</button>
     <button class="mode-tab" data-mode="cardio">Cardio</button>
   </div>
+
+  <section class="card padded form-card" id="custom-card" style="display:none">
+    <h3 style="margin-top:0">Build your own workout</h3>
+    <p class="form-help">Search for exercises, add them with your target sets/reps/weight, then start the session.</p>
+    <div class="field full">
+      <label>Workout name</label>
+      <input class="input" id="custom-name" placeholder="e.g. Tuesday lifts">
+    </div>
+    <div class="field full">
+      <label>Search exercise library</label>
+      <input class="input" id="custom-search" placeholder="Type to find an exercise…" autocomplete="off">
+      <div id="custom-search-results"></div>
+    </div>
+    <div id="custom-list"></div>
+    <button class="btn btn-primary full lg" id="custom-start-btn" style="margin-top: 24px;" disabled>
+      <span class="btn-text">Start workout →</span>
+    </button>
+  </section>
 
   <section class="card padded form-card" id="cardio-card" style="display:none">
     <form id="cardio-form">
@@ -60,8 +79,8 @@
           </div>
         </div>
         <div class="field full">
-          <label>Distance (km, optional)</label>
-          <input class="input" type="number" name="distance_km" min="0" step="0.1" placeholder="optional">
+          <label>Distance <span id="cardio-dist-unit">(mi, optional)</span></label>
+          <input class="input" type="number" name="distance_display" id="cardio-distance-input" min="0" step="0.1" placeholder="optional">
         </div>
       </div>
       <button type="submit" class="btn btn-primary full lg" id="cardio-submit-btn" style="margin-top: 32px;">
@@ -91,13 +110,14 @@
           </div>
         </div>
 
-        <div class="field">
-          <label>Goal</label>
+        <div class="field full">
+          <label>Goal <span class="hint">pick one (or multiple, first is primary)</span></label>
           <div class="choices">
-            <label class="choice"><input type="radio" name="goal" value="muscle_gain" checked><span>Muscle Gain</span></label>
-            <label class="choice"><input type="radio" name="goal" value="strength"><span>Strength</span></label>
-            <label class="choice"><input type="radio" name="goal" value="fat_loss"><span>Fat Loss</span></label>
-            <label class="choice"><input type="radio" name="goal" value="general_fitness"><span>General</span></label>
+            <label class="choice"><input type="checkbox" name="goals" value="fat_loss"><span>Fat Loss</span></label>
+            <label class="choice"><input type="checkbox" name="goals" value="muscle_gain" checked><span>Muscle Gain</span></label>
+            <label class="choice"><input type="checkbox" name="goals" value="strength"><span>Strength</span></label>
+            <label class="choice"><input type="checkbox" name="goals" value="endurance"><span>Endurance</span></label>
+            <label class="choice"><input type="checkbox" name="goals" value="general_fitness"><span>General</span></label>
           </div>
         </div>
 
@@ -150,6 +170,17 @@
           <div class="slider-row">
             <input type="range" id="quick-sets" name="sets_override" min="0" max="5" value="0">
             <span class="slider-value" id="quick-sets-val">auto</span>
+          </div>
+        </div>
+
+        <div class="field full">
+          <label>Recovery <span class="hint" id="quick-recovery-status">no providers connected — pick manually</span></label>
+          <div class="recovery-toggle" id="quick-recovery-toggle">
+            <button type="button" class="recovery-btn hidden" id="quick-auto-recovery-btn" data-recovery="auto">Auto<span class="label" id="quick-auto-recovery-label">from Oura</span></button>
+            <button type="button" class="recovery-btn active" data-recovery="">Off<span class="label">no bias</span></button>
+            <button type="button" class="recovery-btn" data-recovery="0.85">High<span class="label">85%</span></button>
+            <button type="button" class="recovery-btn" data-recovery="0.50">Medium<span class="label">50%</span></button>
+            <button type="button" class="recovery-btn" data-recovery="0.25">Low<span class="label">25%</span></button>
           </div>
         </div>
 

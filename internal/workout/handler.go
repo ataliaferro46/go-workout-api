@@ -3,6 +3,7 @@ package workout
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/ataliaferro46/go-workout-api/internal/auth"
@@ -44,6 +45,48 @@ func (h *Handler) Routes(mux *http.ServeMux, requireAuth func(http.Handler) http
 	mux.Handle("GET /v1/workouts/exercise/last", requireAuth(http.HandlerFunc(h.lastForExercise)))
 	mux.Handle("POST /v1/workouts/cardio", requireAuth(http.HandlerFunc(h.createCardio)))
 	mux.Handle("POST /v1/workouts/{id}/repeat", requireAuth(http.HandlerFunc(h.repeat)))
+	mux.Handle("PATCH /v1/workouts/{id}/exercises/{position}", requireAuth(http.HandlerFunc(h.updateExercise)))
+}
+
+func (h *Handler) updateExercise(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.UserFromContext(r.Context())
+	id := r.PathValue("id")
+	pos, err := strconv.Atoi(r.PathValue("position"))
+	if err != nil || pos < 0 {
+		httpx.Error(w, &domain.ValidationError{Message: "position must be a non-negative integer"})
+		return
+	}
+	var req struct {
+		Sets         int                          `json:"sets"`
+		Reps         int                          `json:"reps"`
+		WeightKG     float64                      `json:"weight_kg"`
+		TargetReps   []int                        `json:"target_reps,omitempty"`
+		Prescription *domain.ExercisePrescription `json:"prescription,omitempty"`
+	}
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		httpx.Error(w, err)
+		return
+	}
+	// Ownership check.
+	existing, err := h.svc.Get(r.Context(), id)
+	if err != nil {
+		httpx.Error(w, err)
+		return
+	}
+	if existing.UserID != u.ID {
+		httpx.Error(w, domain.ErrNotFound)
+		return
+	}
+	if err := h.svc.UpdateExercise(r.Context(), id, pos, req.Sets, req.Reps, req.WeightKG, req.TargetReps, req.Prescription); err != nil {
+		httpx.Error(w, err)
+		return
+	}
+	out, err := h.svc.Get(r.Context(), id)
+	if err != nil {
+		httpx.Error(w, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, out)
 }
 
 // UserWeightFetcher lets the cardio handler ask for the auth user's

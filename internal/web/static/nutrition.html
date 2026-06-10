@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Nutrition · workout.api</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/pages/nutrition.css">
+<script src="/shared/shared.js" defer></script>
+<script src="https://unpkg.com/@zxing/library@0.21.0/umd/index.min.js" defer></script>
+<script src="/pages/nutrition.js" defer></script>
+</head>
+<body>
+<div id="site-header"></div>
+
+<main class="container">
+  <section class="page-head">
+    <span class="eyebrow">today</span>
+    <h2 id="page-date">Loading…</h2>
+    <p class="lede">Log meals against your calorie + macro targets. Workouts logged today subtract from your net.</p>
+  </section>
+
+  <section class="card padded" id="targets-card">
+    <div class="targets-head">
+      <h3>Targets</h3>
+      <button class="btn btn-secondary" id="targets-edit-btn">Edit</button>
+    </div>
+    <div id="targets-body">Loading…</div>
+  </section>
+
+  <section class="card padded" id="rings-card">
+    <div id="rings-body"></div>
+  </section>
+
+  <section class="card padded">
+    <div class="meal-head">
+      <h3>Meals</h3>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-secondary" id="my-plans-btn">📂 My plans</button>
+        <button class="btn btn-secondary" id="recipes-btn">🍲 Recipes</button>
+        <button class="btn btn-secondary" id="suggest-meal-plan-btn">✨ Suggest meals</button>
+        <button class="btn btn-primary" id="add-food-btn">+ Add food</button>
+      </div>
+    </div>
+    <div id="meals-body"></div>
+  </section>
+
+  <section class="card padded hidden" id="meal-plan-card">
+    <div class="meal-head">
+      <h3 id="meal-plan-title">Suggested meals for today</h3>
+      <div style="display:flex; gap:8px">
+        <button class="btn btn-secondary" id="meal-plan-save-btn">💾 Save plan</button>
+        <button class="btn btn-primary" id="meal-plan-log-all-btn">Log all</button>
+        <button class="btn btn-secondary" id="meal-plan-close">×</button>
+      </div>
+    </div>
+    <div class="mode-tabs" style="margin-bottom:12px">
+      <button class="mode-tab active" data-plan-mode="today">Today</button>
+      <button class="mode-tab" data-plan-mode="week">7-day plan</button>
+    </div>
+    <p class="form-help" id="meal-plan-help">Click any food to log it. The picker fits each meal to your remaining macro budget.</p>
+    <div id="meal-plan-body"></div>
+  </section>
+
+  <!-- Add food modal -->
+  <div class="modal hidden" id="add-modal">
+    <div class="modal-body">
+      <div class="modal-head">
+        <h3>Add food</h3>
+        <button class="modal-close" id="add-close">×</button>
+      </div>
+      <div class="add-tabs">
+        <button class="add-tab active" data-add-mode="search">Search</button>
+        <button class="add-tab" data-add-mode="scan">📷 Scan barcode</button>
+      </div>
+      <div id="add-search-pane">
+        <input type="search" id="search-input" class="input" placeholder="Search foods…" autocomplete="off">
+      </div>
+      <div id="add-scan-pane" class="hidden">
+        <video id="scanner-video" playsinline muted autoplay></video>
+        <p class="form-help" id="scan-status">Point your camera at a barcode.</p>
+      </div>
+      <div id="search-results"></div>
+      <div id="serving-row" class="hidden">
+        <div class="field">
+          <label>Servings</label>
+          <input type="number" id="serving-input" class="input" min="0.1" step="0.1" value="1">
+        </div>
+        <div class="field">
+          <label>Meal</label>
+          <select id="meal-input" class="input">
+            <option value="breakfast">Breakfast</option>
+            <option value="lunch">Lunch</option>
+            <option value="dinner">Dinner</option>
+            <option value="snack" selected>Snack</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" id="add-confirm">Log it</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- My plans modal -->
+  <div class="modal hidden" id="plans-modal">
+    <div class="modal-body">
+      <div class="modal-head">
+        <h3>My meal plans</h3>
+        <button class="modal-close" id="plans-close">×</button>
+      </div>
+      <div id="plans-list"></div>
+    </div>
+  </div>
+
+  <!-- Recipes modal -->
+  <div class="modal hidden" id="recipes-modal">
+    <div class="modal-body">
+      <div class="modal-head">
+        <h3>Recipes</h3>
+        <button class="modal-close" id="recipes-close">×</button>
+      </div>
+      <div id="recipes-list" style="margin-bottom: 14px;"></div>
+      <div class="recipe-builder">
+        <h4 style="margin: 0 0 8px;">Create a recipe</h4>
+        <input type="text" id="recipe-name" class="input" placeholder="Recipe name (e.g. Chicken & rice bowl)">
+        <input type="number" id="recipe-servings" class="input" placeholder="Servings the recipe makes" min="1" value="1" style="margin-top: 6px;">
+        <input type="search" id="recipe-search" class="input" placeholder="Add ingredient (search foods)…" style="margin-top: 12px;">
+        <div id="recipe-search-results"></div>
+        <div id="recipe-ingredients"></div>
+        <button class="btn btn-primary" id="recipe-save-btn" disabled style="margin-top: 12px;">Save recipe</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit targets modal -->
+  <div class="modal hidden" id="targets-modal">
+    <div class="modal-body">
+      <div class="modal-head">
+        <h3>Nutrition targets</h3>
+        <button class="modal-close" id="targets-close">×</button>
+      </div>
+      <p class="form-help">Auto-compute from your stored profile (weight, height, birth date, sex) and your goal + activity level.</p>
+      <div class="field">
+        <label>Goal</label>
+        <select id="goal-input" class="input">
+          <option value="maintain">Maintain</option>
+          <option value="lose">Lose weight (~1 lb/wk)</option>
+          <option value="gain">Lean gain</option>
+          <option value="recomp">Body recomp</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Activity level</label>
+        <select id="activity-input" class="input">
+          <option value="sedentary">Sedentary (desk job, no exercise)</option>
+          <option value="light" selected>Light (1-3 days/wk)</option>
+          <option value="moderate">Moderate (3-5 days/wk)</option>
+          <option value="very">Very active (6-7 days/wk)</option>
+          <option value="extreme">Extreme (2x/day or physical job)</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" id="auto-compute-btn">Auto-compute targets</button>
+      <p class="form-help" style="margin-top: 12px;">Or set manually:</p>
+      <div class="targets-manual-grid">
+        <div class="field"><label>Calories</label><input type="number" id="manual-cal" class="input"></div>
+        <div class="field"><label>Protein (g)</label><input type="number" id="manual-p" class="input"></div>
+        <div class="field"><label>Carbs (g)</label><input type="number" id="manual-c" class="input"></div>
+        <div class="field"><label>Fat (g)</label><input type="number" id="manual-f" class="input"></div>
+      </div>
+      <button class="btn btn-secondary" id="save-manual-btn">Save manual</button>
+    </div>
+  </div>
+
+  <div class="callout callout-error hidden" id="error"></div>
+</main>
+
+<div id="site-footer"></div>
+</body>
+</html>

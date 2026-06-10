@@ -29,9 +29,11 @@ import (
 	"github.com/ataliaferro46/go-workout-api/internal/db"
 	"github.com/ataliaferro46/go-workout-api/internal/exercise"
 	"github.com/ataliaferro46/go-workout-api/internal/httpx"
+	"github.com/ataliaferro46/go-workout-api/internal/nutrition"
 	"github.com/ataliaferro46/go-workout-api/internal/plan"
 	"github.com/ataliaferro46/go-workout-api/internal/web"
 	"github.com/ataliaferro46/go-workout-api/internal/workout"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
@@ -113,6 +115,20 @@ func main() {
 	})
 	workoutHandler.Routes(mux, requireAuth)
 
+	// Nutrition — only wired when Postgres is available, since it depends
+	// on shared SQL queries (joining foods/logs/cardio_sessions).
+	if pool := getPool(deps); pool != nil {
+		nutritionRepo := nutrition.NewRepository(pool)
+		nutritionHandler := nutrition.NewHandler(nutritionRepo, func(ctx context.Context, id string) (auth.User, error) {
+			c, err := authUsers.GetByID(ctx, id)
+			if err != nil {
+				return auth.User{}, err
+			}
+			return c.User, nil
+		})
+		nutritionHandler.Routes(mux, requireAuth)
+	}
+
 	// Single-page UI. Pages handle their own auth check client-side and
 	// redirect to /login on 401. Embedded files (HTML, CSS, JS) are served
 	// here regardless of auth so the login page itself can load.
@@ -174,7 +190,10 @@ type deps struct {
 	authUsers         auth.UserRepository
 	authSessions      auth.SessionRepository
 	authVerifications auth.VerificationRepository
+	pgPool            *pgxpool.Pool // nil in in-memory mode
 }
+
+func getPool(d deps) *pgxpool.Pool { return d.pgPool }
 
 func buildStorage(ctx context.Context, logger *slog.Logger, dsn string) (deps, func(), error) {
 	if dsn == "" {
@@ -254,6 +273,7 @@ func buildPostgresDeps(ctx context.Context, logger *slog.Logger, dsn string) (de
 		authUsers:         auth.NewPostgresUserRepository(pool),
 		authSessions:      auth.NewPostgresSessionRepository(pool),
 		authVerifications: auth.NewPostgresVerificationRepository(pool),
+		pgPool:            pool,
 	}, pool.Close, nil
 }
 

@@ -32,6 +32,7 @@ var pageRoutes = map[string]string{
 	"/plans":     "plans.html",
 	"/quick":     "quick.html",
 	"/history":   "history.html",
+	"/nutrition": "nutrition.html",
 	"/login":     "login.html",
 	"/signup":    "signup.html",
 	"/verify":    "verify.html",

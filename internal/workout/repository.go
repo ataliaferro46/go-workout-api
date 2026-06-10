@@ -26,6 +26,10 @@ type Repository interface {
 	// return value is the timestamp of the latest set. Both zero when no
 	// match exists — used by the live workout page's "last time" hint.
 	LastSetsForExercise(ctx context.Context, userID, exerciseName string) ([]domain.LoggedSet, time.Time, error)
+	// UpdateExercise patches the prescription of one exercise inside a
+	// workout (sets / reps / weight / target reps / set type). Used by
+	// the inline editor.
+	UpdateExercise(ctx context.Context, workoutID string, position int, sets, reps int, weightKG float64, targetReps []int, prescription *domain.ExercisePrescription) error
 }
 
 // InMemoryRepository is a concurrency-safe, in-memory Repository. The RWMutex
@@ -148,6 +152,26 @@ func eqInsensitive(a, b string) bool {
 		}
 	}
 	return true
+}
+
+// UpdateExercise patches the in-memory exercise prescription at position.
+func (r *InMemoryRepository) UpdateExercise(ctx context.Context, workoutID string, position int, sets, reps int, weightKG float64, targetReps []int, prescription *domain.ExercisePrescription) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	w, ok := r.workouts[workoutID]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	if position < 0 || position >= len(w.Exercises) {
+		return domain.ErrNotFound
+	}
+	w.Exercises[position].Sets = sets
+	w.Exercises[position].Reps = reps
+	w.Exercises[position].WeightKG = weightKG
+	w.Exercises[position].TargetReps = targetReps
+	w.Exercises[position].Prescription = prescription
+	r.workouts[workoutID] = w
+	return nil
 }
 
 // Delete removes a workout by ID or returns domain.ErrNotFound.

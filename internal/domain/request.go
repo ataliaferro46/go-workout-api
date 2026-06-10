@@ -3,6 +3,12 @@ package domain
 // GenerateRequest is the validated input to the workout generation engine.
 type GenerateRequest struct {
 	Goal               Goal            `json:"goal"`
+	// SecondaryGoals are accepted for forward-compatibility but not yet
+	// consumed by the prescription engine (it uses Goal alone). Adding
+	// them as a no-op field rather than rejecting the request keeps the
+	// front-end's multi-goal selector working without coupling the UI to
+	// engine internals.
+	SecondaryGoals     []Goal          `json:"secondary_goals,omitempty"`
 	Experience         ExperienceLevel `json:"experience"`
 	DaysPerWeek        int             `json:"days_per_week"`
 	SessionMinutes     int             `json:"session_minutes"`

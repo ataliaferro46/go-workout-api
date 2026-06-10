@@ -163,10 +163,12 @@
       const setsOv = parseInt(setsOverrideSlider.value, 10);
       if (setsOv > 0) body.sets_override = setsOv;
 
-      // Loading state.
+      // Loading state — rewrite the whole button to avoid stale-reference
+      // bugs on the second click after a failed first try.
+      const ORIGINAL_BTN_HTML =
+        '<span class="btn-text">Generate Plan</span><span class="arrow">→</span>';
       submitBtn.disabled = true;
-      btnText.textContent = 'Generating';
-      arrow.outerHTML = '<span class="spinner"></span>';
+      submitBtn.innerHTML = '<span class="btn-text">Generating</span><span class="spinner"></span>';
 
       try {
         const url = '/v1/plans/generate?seed=' + Date.now() +
@@ -177,9 +179,7 @@
         UI.showError(errorBox, err);
       } finally {
         submitBtn.disabled = false;
-        btnText.textContent = 'Generate Plan';
-        const spin = submitBtn.querySelector('.spinner');
-        if (spin) spin.outerHTML = '<span class="arrow">→</span>';
+        submitBtn.innerHTML = ORIGINAL_BTN_HTML;
       }
     });
   });

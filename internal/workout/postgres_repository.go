@@ -2,6 +2,7 @@ package workout
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -54,11 +55,23 @@ func (r *PostgresRepository) Create(ctx context.Context, w domain.Workout) error
 		return fmt.Errorf("insert workout: %w", err)
 	}
 	for i, ex := range w.Exercises {
+		prescriptionJSON := []byte("{}")
+		if ex.Prescription != nil {
+			b, err := json.Marshal(ex.Prescription)
+			if err != nil {
+				return fmt.Errorf("marshal prescription %d: %w", i, err)
+			}
+			prescriptionJSON = b
+		}
+		targetReps := ex.TargetReps
+		if targetReps == nil {
+			targetReps = []int{}
+		}
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO workout_exercises
-				(workout_id, position, name, sets, reps, weight_kg)
-			VALUES ($1, $2, $3, $4, $5, $6)
-		`, w.ID, i, ex.Name, ex.Sets, ex.Reps, ex.WeightKG); err != nil {
+				(workout_id, position, name, sets, reps, weight_kg, prescription, target_reps)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		`, w.ID, i, ex.Name, ex.Sets, ex.Reps, ex.WeightKG, prescriptionJSON, targetReps); err != nil {
 			return fmt.Errorf("insert exercise %d (%q): %w", i, ex.Name, err)
 		}
 	}
@@ -73,7 +86,8 @@ func (r *PostgresRepository) Create(ctx context.Context, w domain.Workout) error
 const workoutSelect = `
 	SELECT w.id, w.user_id, w.name, w.notes, w.created_at,
 	       w.plan_id, w.plan_day_idx, w.type,
-	       e.position, e.name, e.sets, e.reps, e.weight_kg
+	       e.position, e.name, e.sets, e.reps, e.weight_kg,
+	       e.prescription, e.target_reps
 	FROM workouts w
 	LEFT JOIN workout_exercises e ON e.workout_id = w.id
 `
@@ -245,6 +259,38 @@ func (r *PostgresRepository) LastSetsForExercise(ctx context.Context, userID, ex
 	return out, when, rows.Err()
 }
 
+// UpdateExercise patches the prescription (sets, reps, weight, target
+// reps, set type) of a single workout_exercises row. Used by the inline
+// editor on the live workout page so the user can adjust their working
+// scheme mid-session ("I'm going to do 4 sets instead of 3").
+func (r *PostgresRepository) UpdateExercise(ctx context.Context, workoutID string, position int, sets, reps int, weightKG float64, targetReps []int, prescription *domain.ExercisePrescription) error {
+	tr := targetReps
+	if tr == nil {
+		tr = []int{}
+	}
+	prescriptionJSON := []byte("{}")
+	if prescription != nil {
+		b, err := json.Marshal(prescription)
+		if err != nil {
+			return fmt.Errorf("marshal prescription: %w", err)
+		}
+		prescriptionJSON = b
+	}
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE workout_exercises
+		SET sets = $3, reps = $4, weight_kg = $5,
+		    target_reps = $6, prescription = $7
+		WHERE workout_id = $1 AND position = $2
+	`, workoutID, position, sets, reps, weightKG, tr, prescriptionJSON)
+	if err != nil {
+		return fmt.Errorf("update exercise: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
 // LogSet records a per-set log entry. Idempotent on (workout_id,
 // exercise_position, set_number) — re-logging the same set overwrites
 // the previous values, so the front-end can let the user correct typos
@@ -326,11 +372,14 @@ func scanWorkouts(rows pgx.Rows) ([]domain.Workout, error) {
 			exName                  *string
 			sets, reps              *int32
 			weightKg                *float64
+			prescriptionJSON        []byte
+			targetReps              []int32
 		)
 		if err := rows.Scan(
 			&id, &userID, &name, &notes, &createdAt,
 			&planID, &planDayIdx, &workoutType,
 			&position, &exName, &sets, &reps, &weightKg,
+			&prescriptionJSON, &targetReps,
 		); err != nil {
 			return nil, fmt.Errorf("scan row: %w", err)
 		}
@@ -351,12 +400,26 @@ func scanWorkouts(rows pgx.Rows) ([]domain.Workout, error) {
 		// position is NULL only when the LEFT JOIN found no exercises for this
 		// workout — leave Exercises as the empty slice initialized above.
 		if position != nil {
-			out[currentIdx].Exercises = append(out[currentIdx].Exercises, domain.LoggedExercise{
+			le := domain.LoggedExercise{
 				Name:     deref(exName),
 				Sets:     int(deref(sets)),
 				Reps:     int(deref(reps)),
 				WeightKG: deref(weightKg),
-			})
+			}
+			if len(targetReps) > 0 {
+				le.TargetReps = make([]int, len(targetReps))
+				for i, v := range targetReps {
+					le.TargetReps[i] = int(v)
+				}
+			}
+			if len(prescriptionJSON) > 0 && string(prescriptionJSON) != "{}" {
+				var p domain.ExercisePrescription
+				if err := json.Unmarshal(prescriptionJSON, &p); err == nil &&
+					(p.SetType != "" || p.SetTypeNote != "" || len(p.Warmups) > 0 || p.RestSeconds > 0) {
+					le.Prescription = &p
+				}
+			}
+			out[currentIdx].Exercises = append(out[currentIdx].Exercises, le)
 		}
 	}
 	if err := rows.Err(); err != nil {

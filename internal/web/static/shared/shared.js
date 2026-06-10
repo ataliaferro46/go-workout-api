@@ -164,6 +164,7 @@
   const NAV_LINKS = [
     { href: '/',          label: 'Generate' },
     { href: '/quick',     label: 'Quick' },
+    { href: '/nutrition', label: 'Nutrition' },
     { href: '/exercises', label: 'Exercises' },
     { href: '/plans',     label: 'Plans' },
     { href: '/history',   label: 'History' },
@@ -243,6 +244,63 @@
     } catch (e) { return iso; }
   }
 
+  // --- units / measurement system --------------------------------------
+  //
+  // Single source of truth for measurement preference. Default is
+  // imperial (lbs / miles / ft+in) — the storage system is always metric
+  // (kg, km, cm) and the UI converts on input/display. Switching
+  // systems updates localStorage; pages decide whether to re-render or
+  // listen for the change event.
+
+  // One-time migration: earlier versions stored 'kg' or 'lbs' as the
+  // unit preference. Map those to the new 'metric' / 'imperial' values.
+  (function migrateUnitsKey() {
+    const cur = localStorage.getItem('wapi.unit');
+    if (cur === 'kg') localStorage.setItem('wapi.unit', 'metric');
+    else if (cur === 'lbs') localStorage.setItem('wapi.unit', 'imperial');
+  })();
+
+  const UNITS = {
+    system() { return localStorage.getItem('wapi.unit') === 'metric' ? 'metric' : 'imperial'; },
+    setSystem(sys) {
+      localStorage.setItem('wapi.unit', sys === 'metric' ? 'metric' : 'imperial');
+      window.dispatchEvent(new CustomEvent('wapi:units-changed', { detail: { system: sys } }));
+    },
+    // --- weight ---
+    weightLabel() { return UNITS.system() === 'imperial' ? 'lbs' : 'kg'; },
+    kgToDisplay(kg) {
+      if (kg == null || kg === 0) return 0;
+      return UNITS.system() === 'imperial' ? +(kg * 2.20462).toFixed(1) : +kg.toFixed(1);
+    },
+    displayToKg(val) {
+      if (val == null || isNaN(val)) return 0;
+      return UNITS.system() === 'imperial' ? +(val / 2.20462).toFixed(2) : +val;
+    },
+    // --- distance ---
+    distanceLabel() { return UNITS.system() === 'imperial' ? 'mi' : 'km'; },
+    kmToDisplay(km) {
+      if (km == null || km === 0) return 0;
+      return UNITS.system() === 'imperial' ? +(km * 0.621371).toFixed(2) : +km.toFixed(2);
+    },
+    displayToKm(val) {
+      if (val == null || isNaN(val)) return 0;
+      return UNITS.system() === 'imperial' ? +(val / 0.621371).toFixed(2) : +val;
+    },
+    // --- height (cm <-> ft + in) ---
+    cmToFtIn(cm) {
+      if (!cm) return { ft: 0, inches: 0 };
+      const totalIn = cm / 2.54;
+      const ft = Math.floor(totalIn / 12);
+      const inches = Math.round(totalIn - ft * 12);
+      return { ft, inches };
+    },
+    ftInToCm(ft, inches) {
+      const f = parseInt(ft, 10) || 0;
+      const i = parseInt(inches, 10) || 0;
+      return Math.round((f * 12 + i) * 2.54);
+    },
+  };
+
   // --- export ----------------------------------------------------------
 
   window.API = {
@@ -264,6 +322,7 @@
     formatTitleCase,
     formatDate,
   };
+  window.UNITS = UNITS;
 
   // Run on script load — every page includes this script in <head>.
   document.addEventListener('DOMContentLoaded', renderShell);

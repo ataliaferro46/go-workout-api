@@ -296,6 +296,21 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	return s.repo.Delete(ctx, id)
 }
 
+// LatestRecoveryHint pulls the user's freshest recovery reading. Returns
+// nil when no source is wired or the reading isn't fresh. Used by the
+// quick-day endpoint so an ad-hoc workout can opt into recovery-aware
+// programming the same way the weekly generator does.
+func (s *Service) LatestRecoveryHint(ctx context.Context, userID string) *float64 {
+	if s.recovery == nil {
+		return nil
+	}
+	value, fresh, err := s.recovery.LatestRecovery(ctx, userID)
+	if err != nil || !fresh {
+		return nil
+	}
+	return &value
+}
+
 // ReorderDays accepts a new day order as a slice of the existing day_idx
 // values in their desired sequence and remaps them to 1..N. So passing
 // [2, 1, 3, 4, 5] for a 5-day plan swaps days 1 and 2 (the user's "do

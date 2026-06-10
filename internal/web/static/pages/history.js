@@ -121,12 +121,13 @@
           (planned > 0 ? planned + ' sets prescribed, none logged' : 'No sets logged') +
         '</div>';
       } else {
+        const unit = UNITS.weightLabel();
         setsHTML = '<div class="dx-sets">' +
           logged.map(s => {
             // Bodyweight movements log with weight_kg = 0; show "X reps"
-            // instead of "X × 0 kg" so the chip reads cleanly.
+            // instead of "X × 0" so the chip reads cleanly.
             const valStr = s.weight_kg > 0
-              ? s.reps + ' × ' + s.weight_kg + ' kg'
+              ? s.reps + ' × ' + UNITS.kgToDisplay(s.weight_kg) + ' ' + unit
               : s.reps + ' reps';
             return '<div class="dx-set">' +
               '<span class="dx-set-num">Set ' + s.set_number + '</span>' +
