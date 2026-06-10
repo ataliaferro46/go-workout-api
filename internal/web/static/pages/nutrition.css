@@ -314,3 +314,24 @@
   color: var(--accent);
   border-color: var(--accent);
 }
+.adv {
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  line-height: 1.4;
+}
+.adv strong { font-weight: 600; }
+.adv-pre {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #f59e0b;
+}
+.adv-pre strong { color: #f59e0b; }
+.adv-post {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #10b981;
+}
+.adv-post strong { color: #10b981; }

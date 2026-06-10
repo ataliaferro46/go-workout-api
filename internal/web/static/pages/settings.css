@@ -242,6 +242,92 @@
   color: var(--text-faint);
   margin: 12px 0 0;
 }
+.bf-guide {
+  margin: 12px 0;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.bf-guide-title {
+  margin: 0 0 6px;
+  font-size: 11px;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+}
+.bf-guide-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+.bf-guide-row strong { color: var(--text); }
+
+/* Body fat picker — tabs + figure tiles */
+.bf-tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+.bf-tab {
+  flex: 1;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.bf-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.bf-figures {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.bf-figure {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 4px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: all 120ms ease;
+}
+.bf-figure:hover { border-color: var(--accent); }
+.bf-figure.picked {
+  border-color: var(--accent);
+  background: rgba(139, 92, 246, 0.08);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.bf-figure-svg svg {
+  width: 50px;
+  height: 90px;
+  color: var(--text);
+}
+.bf-figure-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 600;
+  margin-top: 6px;
+}
+.bf-figure-desc {
+  font-size: 10px;
+  color: var(--text-faint);
+  text-align: center;
+  margin-top: 2px;
+}
+.bf-guide-foot {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+@media (max-width: 500px) {
+  .bf-figures { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .bf-figure-svg svg { width: 40px; height: 72px; }
+}
 
 @media (max-width: 640px) {
   .profile-row {

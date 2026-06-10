@@ -61,6 +61,18 @@ func Handler() http.Handler {
 			return
 		}
 
+		// Browsers auto-request /favicon.ico — serve the SVG with the
+		// proper MIME so it works in both legacy and modern engines.
+		if path == "/favicon.ico" {
+			data, err := fs.ReadFile(sub, "favicon.svg")
+			if err == nil {
+				w.Header().Set("Content-Type", "image/svg+xml")
+				w.Header().Set("Cache-Control", "public, max-age=86400")
+				w.Write(data)
+				return
+			}
+		}
+
 		// Clean-URL → file mapping. Strip a trailing slash so /exercises/
 		// and /exercises route the same way.
 		clean := strings.TrimRight(path, "/")

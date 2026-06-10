@@ -14,6 +14,8 @@ type UserRepository interface {
 	GetByEmail(ctx context.Context, email string) (UserCredentials, error)
 	MarkVerified(ctx context.Context, userID string, when time.Time) error
 	UpdateProfile(ctx context.Context, userID string, heightCM *int, weightKG *float64, birth *time.Time, sex *string, now time.Time) error
+	UpdateBodyFat(ctx context.Context, userID string, bf *float64, now time.Time) error
+	UpdateWorkoutTime(ctx context.Context, userID, workoutTime string, now time.Time) error
 }
 
 // SessionRepository persists session-token hashes. Plaintext tokens never
@@ -88,6 +90,32 @@ func (r *InMemoryUserRepository) MarkVerified(_ context.Context, userID string, 
 	}
 	c.User.EmailVerifiedAt = &when
 	c.User.UpdatedAt = when
+	r.byID[userID] = c
+	return nil
+}
+
+func (r *InMemoryUserRepository) UpdateWorkoutTime(_ context.Context, userID, wt string, now time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	c, ok := r.byID[userID]
+	if !ok {
+		return ErrUserNotFound
+	}
+	c.User.WorkoutTime = wt
+	c.User.UpdatedAt = now
+	r.byID[userID] = c
+	return nil
+}
+
+func (r *InMemoryUserRepository) UpdateBodyFat(_ context.Context, userID string, bf *float64, now time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	c, ok := r.byID[userID]
+	if !ok {
+		return ErrUserNotFound
+	}
+	c.User.BodyFatPercentage = bf
+	c.User.UpdatedAt = now
 	r.byID[userID] = c
 	return nil
 }

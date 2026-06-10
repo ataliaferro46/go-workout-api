@@ -58,10 +58,12 @@ func (h *Handler) updateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		HeightCM  *int     `json:"height_cm,omitempty"`
-		WeightKG  *float64 `json:"weight_kg,omitempty"`
-		BirthDate *string  `json:"birth_date,omitempty"` // YYYY-MM-DD
-		Sex       *string  `json:"sex,omitempty"`
+		HeightCM          *int     `json:"height_cm,omitempty"`
+		WeightKG          *float64 `json:"weight_kg,omitempty"`
+		BirthDate         *string  `json:"birth_date,omitempty"` // YYYY-MM-DD
+		Sex               *string  `json:"sex,omitempty"`
+		BodyFatPercentage *float64 `json:"body_fat_percentage,omitempty"`
+		WorkoutTime       *string  `json:"workout_time,omitempty"`
 	}
 	if err := httpx.DecodeJSON(r, &req); err != nil {
 		httpx.Error(w, err)
@@ -80,6 +82,22 @@ func (h *Handler) updateProfile(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		mapAuthError(w, err)
 		return
+	}
+	// Body-fat % is updated separately to keep it nullable (a null clears
+	// the value entirely; absent leaves it unchanged).
+	if req.BodyFatPercentage != nil {
+		if err := h.svc.UpdateBodyFat(r.Context(), u.ID, req.BodyFatPercentage); err != nil {
+			mapAuthError(w, err)
+			return
+		}
+		updated.BodyFatPercentage = req.BodyFatPercentage
+	}
+	if req.WorkoutTime != nil {
+		if err := h.svc.UpdateWorkoutTime(r.Context(), u.ID, *req.WorkoutTime); err != nil {
+			mapAuthError(w, err)
+			return
+		}
+		updated.WorkoutTime = *req.WorkoutTime
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"user": updated})
 }

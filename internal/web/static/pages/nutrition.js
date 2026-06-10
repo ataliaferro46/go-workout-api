@@ -524,6 +524,34 @@
     }
   }
 
+  // mealAdvisory returns a small contextual note for a meal slot based
+  // on the user's stored workout time. The closest meal-before-workout
+  // gets a carb-forward, low-fat advisory; the meal after gets a high-
+  // protein, moderate-carb advisory.
+  function mealAdvisory(mealName) {
+    const user = (AUTH.currentUser && AUTH.currentUser()) || {};
+    const wt = user.workout_time;
+    if (!wt) return '';
+    const [hStr, mStr] = wt.split(':');
+    const wHour = parseInt(hStr, 10);
+    const wMin = parseInt(mStr, 10) || 0;
+    const wAt = wHour + wMin / 60.0;
+    // Conventional meal times — could later become user-settable.
+    const slotHours = { breakfast: 8, lunch: 12.5, dinner: 19, snack: 15.5 };
+    const mealAt = slotHours[mealName];
+    if (mealAt == null) return '';
+    const diff = wAt - mealAt; // hours from meal to workout
+    if (diff > 0.5 && diff <= 3) {
+      // Meal is 0.5–3 hours before workout → pre-workout
+      return '<div class="adv adv-pre"><strong>Pre-workout</strong> · 30-50g carbs, 15-25g protein, keep fat low. Workout in ~' + Math.round(diff * 10) / 10 + ' hr</div>';
+    }
+    if (diff > -2.5 && diff < -0.5) {
+      // Meal is 0.5–2.5 hours after workout → post-workout
+      return '<div class="adv adv-post"><strong>Post-workout</strong> · 30-40g protein + 50-80g carbs to refuel + recover</div>';
+    }
+    return '';
+  }
+
   function renderMealSuggestion(slot, date) {
     const totalCal = slot.totals.calories;
     return '<div class="meal-suggestion">' +
@@ -531,6 +559,7 @@
         '<h4>' + slot.meal[0].toUpperCase() + slot.meal.slice(1) + '</h4>' +
         '<span class="meal-cal">' + totalCal + ' / ' + slot.target_calories + ' kcal</span>' +
       '</div>' +
+      mealAdvisory(slot.meal) +
       slot.foods.map(fs =>
         '<div class="meal-sg-row">' +
           '<div class="log-main">' +

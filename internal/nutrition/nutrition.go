@@ -511,19 +511,28 @@ var activityMultipliers = map[string]float64{
 	"extreme":  1.9,
 }
 
-// goalAdjustments shifts calories by goal: lose = -500/day (~1 lb/wk
-// deficit), gain = +300 (lean bulk), maintain = 0, recomp = -200 (slight
-// deficit with protein bias).
+// goalAdjustments shifts calories by goal. Granularity from aggressive
+// cut to aggressive bulk lets users pick their pace. Old values
+// ('lose', 'gain') are preserved for back-compat with existing rows.
 var goalAdjustments = map[string]int{
-	"maintain": 0,
-	"lose":     -500,
-	"gain":     300,
-	"recomp":   -200,
+	"aggressive_cut": -750, // ~1.5 lb/wk deficit
+	"cut":            -500, // ~1 lb/wk
+	"slow_cut":       -300, // gentle, sustainable
+	"recomp":         -200, // slight deficit + high protein
+	"maintain":       0,
+	"slow_bulk":      200,
+	"bulk":           400,
+	"aggressive_bulk": 600,
+	// Legacy aliases — keep existing user rows valid.
+	"lose": -500,
+	"gain": 300,
 }
 
-// ComputeTargets uses Mifflin-St Jeor for BMR, then applies activity
-// multiplier + goal adjustment. Returns zero-valued targets if the
-// inputs are insufficient (no weight, no height, no birth date).
+// ComputeTargets derives daily calorie + macro targets from the user's
+// profile. Uses Katch-McArdle (BMR = 370 + 21.6 × LBM) when body-fat %
+// is known — much more accurate for muscular athletes whose BMI
+// overstates body fat. Falls back to Mifflin-St Jeor (BMR from weight
+// + age) when BF% is missing.
 func ComputeTargets(u auth.User, goal, activity string) domain.NutritionTargets {
 	if u.WeightKG == nil || u.HeightCM == nil || u.BirthDate == nil {
 		return domain.NutritionTargets{Goal: goal, ActivityLevel: activity}
@@ -531,18 +540,22 @@ func ComputeTargets(u auth.User, goal, activity string) domain.NutritionTargets 
 	age := yearsBetween(*u.BirthDate, time.Now().UTC())
 	weight := *u.WeightKG
 	height := float64(*u.HeightCM)
-	// Mifflin-St Jeor (sex-aware).
-	bmrBase := 10*weight + 6.25*height - 5*float64(age)
 	var bmr float64
-	switch strings.ToLower(u.Sex) {
-	case "male":
-		bmr = bmrBase + 5
-	case "female":
-		bmr = bmrBase - 161
-	default:
-		// Average of the two formulas — best honest default for
-		// unspecified / other.
-		bmr = bmrBase - 78
+	if u.BodyFatPercentage != nil && *u.BodyFatPercentage > 0 && *u.BodyFatPercentage < 60 {
+		// Katch-McArdle. Most accurate when LBM is known.
+		lbm := weight * (1 - *u.BodyFatPercentage/100)
+		bmr = 370 + 21.6*lbm
+	} else {
+		// Mifflin-St Jeor fallback (sex-aware).
+		bmrBase := 10*weight + 6.25*height - 5*float64(age)
+		switch strings.ToLower(u.Sex) {
+		case "male":
+			bmr = bmrBase + 5
+		case "female":
+			bmr = bmrBase - 161
+		default:
+			bmr = bmrBase - 78
+		}
 	}
 	mult, ok := activityMultipliers[activity]
 	if !ok {
@@ -555,15 +568,27 @@ func ComputeTargets(u auth.User, goal, activity string) domain.NutritionTargets 
 	}
 	calories := int(tdee) + adj
 
-	// Macro split: protein 1g/lb body weight (recomp/gain), 1.2g/lb
-	// (lose). Then fat at ~25% of calories. Carbs fill the rest.
-	proteinG := int(weight * 2.2 * 1.0)
-	if goal == "lose" {
-		proteinG = int(weight * 2.2 * 1.2)
+	// Macro split: protein scaled by goal — cuts need MORE protein to
+	// preserve muscle in a deficit; bulks need LESS to leave room for
+	// the calorie surplus to come from carbs/fat. Base is 1g per lb of
+	// body weight; cuts step up to 1.2g, bulks step down to 0.9g.
+	proteinPerLb := 1.0
+	switch goal {
+	case "aggressive_cut", "cut", "lose":
+		proteinPerLb = 1.2
+	case "slow_cut", "recomp":
+		proteinPerLb = 1.1
+	case "slow_bulk", "bulk", "aggressive_bulk", "gain":
+		proteinPerLb = 0.9
 	}
-	if goal == "gain" {
-		proteinG = int(weight * 2.2 * 0.9)
+	// If BF% is known, scale protein off LEAN mass for better accuracy
+	// in muscular athletes. Otherwise scale off total body weight.
+	proteinTargetKG := weight
+	if u.BodyFatPercentage != nil && *u.BodyFatPercentage > 0 && *u.BodyFatPercentage < 60 {
+		proteinTargetKG = weight * (1 - *u.BodyFatPercentage/100)
+		proteinPerLb += 0.1 // bonus floor when scaling off LBM
 	}
+	proteinG := int(proteinTargetKG * 2.2 * proteinPerLb)
 	fatG := int(float64(calories) * 0.25 / 9.0)
 	carbCalories := calories - proteinG*4 - fatG*9
 	carbsG := carbCalories / 4
@@ -1003,7 +1028,7 @@ func pickMealsWithUsed(foods []domain.Food, t domain.NutritionTargets, used map[
 	for _, s := range slots {
 		mealCal := int(float64(t.Calories) * s.pct)
 		mealProt := totalP * s.pct
-		picked := pickForMeal(foods, mealCal, mealProt, used)
+		picked := pickForMealTyped(foods, mealCal, mealProt, used, s.name)
 		var tot domain.NutritionTotals
 		for _, fs := range picked {
 			tot.Calories += int(float64(fs.Food.Calories) * fs.Servings)
@@ -1136,7 +1161,7 @@ func pickMeals(foods []domain.Food, t domain.NutritionTargets) []MealSlot {
 	for _, s := range slots {
 		mealCal := int(float64(t.Calories) * s.pct)
 		mealProt := totalP * s.pct
-		picked := pickForMeal(foods, mealCal, mealProt, used)
+		picked := pickForMealTyped(foods, mealCal, mealProt, used, s.name)
 		var tot domain.NutritionTotals
 		for _, fs := range picked {
 			tot.Calories += int(float64(fs.Food.Calories) * fs.Servings)
@@ -1153,9 +1178,73 @@ func pickMeals(foods []domain.Food, t domain.NutritionTargets) []MealSlot {
 	return out
 }
 
-func pickForMeal(foods []domain.Food, mealCal int, mealProtein float64, used map[string]int) []MealFoodSuggestion {
+// Meal-type word lists. Bias the picker toward foods that "make sense"
+// at the given meal slot so we don't suggest 200g of ground beef at
+// breakfast. These are intentionally permissive — anything that's
+// strongly anti-matched gets penalized (-1.0) but not filtered out, so
+// outlier-but-fit choices can still surface (e.g., chicken at breakfast
+// for a high-protein meal-prep style).
+var (
+	breakfastKeywords = []string{"oat", "egg", "yogurt", "banana", "berry", "blueberr", "strawberr",
+		"raspberr", "milk", "bread", "bagel", "granola", "coffee", "pancake", "waffle",
+		"cereal", "muffin", "smoothie", "cottage cheese", "almond butter", "peanut butter",
+		"toast", "breakfast", "kefir", "porridge", "fruit"}
+	dinnerKeywords = []string{"beef", "pork", "steak", "ground", "rib", "brisket", "pasta",
+		"chop", "burger", "lamb", "veal", "shank", "roast", "dinner"}
+	lunchKeywords = []string{"chicken", "salad", "wrap", "sandwich", "tuna", "salmon",
+		"quinoa", "lentil", "bean", "soup", "rice"}
+)
+
+func matchesAnyKeyword(name string, kws []string) bool {
+	for _, k := range kws {
+		if strings.Contains(name, k) {
+			return true
+		}
+	}
+	return false
+}
+
+// mealTypeBias returns a score modifier reflecting how well a food fits
+// the meal slot. Strongly negative for clear mismatches (beef for
+// breakfast), positive for clear matches.
+func mealTypeBias(foodName, mealType string) float64 {
+	n := strings.ToLower(foodName)
+	switch mealType {
+	case "breakfast":
+		if matchesAnyKeyword(n, dinnerKeywords) {
+			return -1.5
+		}
+		if matchesAnyKeyword(n, breakfastKeywords) {
+			return 0.6
+		}
+	case "dinner":
+		if matchesAnyKeyword(n, breakfastKeywords) {
+			return -0.6 // softer — pancakes for dinner is whatever
+		}
+		if matchesAnyKeyword(n, dinnerKeywords) || matchesAnyKeyword(n, lunchKeywords) {
+			return 0.4
+		}
+	case "lunch":
+		if matchesAnyKeyword(n, breakfastKeywords) {
+			return -0.4
+		}
+		if matchesAnyKeyword(n, lunchKeywords) || matchesAnyKeyword(n, dinnerKeywords) {
+			return 0.3
+		}
+	case "snack":
+		// Snacks are forgiving — small penalty for full-meal foods
+		if matchesAnyKeyword(n, dinnerKeywords) {
+			return -0.5
+		}
+	}
+	return 0
+}
+
+func pickForMealTyped(foods []domain.Food, mealCal int, mealProtein float64, used map[string]int, mealType string) []MealFoodSuggestion {
 	// Sort by protein density (g protein per kcal) descending, with a
-	// penalty for already-used foods to encourage variety.
+	// penalty for already-used foods and a meal-type bias that pushes
+	// breakfast foods toward breakfast and full-dinner foods toward
+	// dinner.
 	type scored struct {
 		ex     domain.Food
 		score  float64
@@ -1167,7 +1256,8 @@ func pickForMeal(foods []domain.Food, mealCal int, mealProtein float64, used map
 		}
 		pd := f.ProteinG / float64(f.Calories)
 		penalty := float64(used[f.ID]) * 0.5
-		cands = append(cands, scored{ex: f, score: pd - penalty})
+		bias := mealTypeBias(f.Name, mealType)
+		cands = append(cands, scored{ex: f, score: pd - penalty + bias})
 	}
 	// Bubble-sort descending — small N.
 	for i := 0; i < len(cands); i++ {

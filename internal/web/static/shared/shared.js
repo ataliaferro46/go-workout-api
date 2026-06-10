@@ -324,6 +324,21 @@
   };
   window.UNITS = UNITS;
 
+  // Inject the SVG favicon if the page didn't declare one. Modern browsers
+  // prefer the rel="icon" + type="image/svg+xml" link element; the legacy
+  // /favicon.ico request is served from the same SVG (see embed.go).
+  function injectFavicon() {
+    if (document.querySelector('link[rel="icon"]')) return;
+    const link = document.createElement('link');
+    link.rel = 'icon';
+    link.type = 'image/svg+xml';
+    link.href = '/favicon.svg';
+    document.head.appendChild(link);
+  }
+
   // Run on script load — every page includes this script in <head>.
-  document.addEventListener('DOMContentLoaded', renderShell);
+  document.addEventListener('DOMContentLoaded', () => {
+    injectFavicon();
+    renderShell();
+  });
 })();

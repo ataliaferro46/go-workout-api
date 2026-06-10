@@ -207,6 +207,18 @@ func (s *Service) UpdateProfile(ctx context.Context, userID string, heightCM *in
 	return c.User, nil
 }
 
+// UpdateBodyFat persists the user's body-fat-percentage estimate. Passing
+// a nil value clears it.
+func (s *Service) UpdateBodyFat(ctx context.Context, userID string, bf *float64) error {
+	return s.users.UpdateBodyFat(ctx, userID, bf, time.Now().UTC())
+}
+
+// UpdateWorkoutTime stores the user's preferred workout clock time ("HH:MM").
+// Empty string clears it.
+func (s *Service) UpdateWorkoutTime(ctx context.Context, userID, wt string) error {
+	return s.users.UpdateWorkoutTime(ctx, userID, wt, time.Now().UTC())
+}
+
 // SessionUser looks up the user behind a session token. The middleware uses
 // this on every request to convert the cookie value into a user id.
 func (s *Service) SessionUser(ctx context.Context, token string) (User, error) {

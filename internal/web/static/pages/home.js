@@ -4,7 +4,13 @@
   'use strict';
 
   document.addEventListener('DOMContentLoaded', async () => {
-    await AUTH.ensureLoggedIn();
+    const user = await AUTH.ensureLoggedIn();
+    // Tiny easter egg — show a quote card on the home page when a
+    // particular friend signs in. Matched loosely by email so capitalization
+    // and aliases don't break it.
+    if (user && user.email && /burgess|will\.b|wburgess/i.test(user.email)) {
+      injectWillBurgessQuote();
+    }
     const form = document.getElementById('plan-form');
     if (!form) return;
 
@@ -183,6 +189,20 @@
       }
     });
   });
+
+  function injectWillBurgessQuote() {
+    const card = document.createElement('div');
+    card.className = 'eg-card';
+    card.innerHTML =
+      '<div class="eg-card-quote">' +
+        '<span class="eg-quote-mark">"</span>' +
+        'There\'s no commandment that says thou shall not send.' +
+      '</div>' +
+      '<div class="eg-card-attr">— Will Burgess</div>' +
+      '<button class="eg-card-close" aria-label="Dismiss">×</button>';
+    document.body.appendChild(card);
+    card.querySelector('.eg-card-close').addEventListener('click', () => card.remove());
+  }
 
   function renderSetTypeBadge(ex) {
     if (!ex.set_type || ex.set_type === 'standard') return '';

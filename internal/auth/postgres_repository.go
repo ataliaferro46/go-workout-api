@@ -51,7 +51,8 @@ func (r *PostgresUserRepository) GetByEmail(ctx context.Context, email string) (
 func (r *PostgresUserRepository) scanOne(ctx context.Context, where string, arg any) (UserCredentials, error) {
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, email, password_hash, email_verified_at,
-		       height_cm, weight_kg, birth_date, sex,
+		       height_cm, weight_kg, birth_date, sex, body_fat_percentage,
+		       workout_time,
 		       created_at, updated_at
 		FROM users `+where+` LIMIT 1`, arg)
 
@@ -61,8 +62,10 @@ func (r *PostgresUserRepository) scanOne(ctx context.Context, where string, arg 
 	var weight *float64
 	var birth *time.Time
 	var sex *string
+	var bodyFat *float64
+	var workoutTime *string
 	err := row.Scan(&c.User.ID, &c.User.Email, &c.PasswordHash, &verified,
-		&height, &weight, &birth, &sex,
+		&height, &weight, &birth, &sex, &bodyFat, &workoutTime,
 		&c.User.CreatedAt, &c.User.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -80,11 +83,28 @@ func (r *PostgresUserRepository) scanOne(ctx context.Context, where string, arg 
 	if sex != nil {
 		c.User.Sex = *sex
 	}
+	c.User.BodyFatPercentage = bodyFat
+	if workoutTime != nil {
+		c.User.WorkoutTime = *workoutTime
+	}
 	return c, nil
 }
 
-// UpdateProfile persists user-edited profile fields (height/weight/birth/sex).
-// Any pointer field set to nil leaves the column unchanged.
+// UpdateWorkoutTime persists the user's preferred workout time as
+// "HH:MM" or clears it when wt is "".
+func (r *PostgresUserRepository) UpdateWorkoutTime(ctx context.Context, userID, wt string, now time.Time) error {
+	var arg any
+	if wt != "" {
+		arg = wt
+	}
+	_, err := r.pool.Exec(ctx,
+		`UPDATE users SET workout_time = $2, updated_at = $3 WHERE id = $1`,
+		userID, arg, now)
+	return err
+}
+
+// UpdateProfile persists user-edited profile fields. Any nil pointer
+// field leaves the column unchanged.
 func (r *PostgresUserRepository) UpdateProfile(ctx context.Context, userID string, heightCM *int, weightKG *float64, birth *time.Time, sex *string, now time.Time) error {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE users SET
@@ -102,6 +122,16 @@ func (r *PostgresUserRepository) UpdateProfile(ctx context.Context, userID strin
 		return ErrUserNotFound
 	}
 	return nil
+}
+
+// UpdateBodyFat sets the body-fat percentage on the user, optionally
+// keeping it null (not yet known). Separate method to avoid polluting
+// the main UpdateProfile signature.
+func (r *PostgresUserRepository) UpdateBodyFat(ctx context.Context, userID string, bf *float64, now time.Time) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE users SET body_fat_percentage = $2, updated_at = $3 WHERE id = $1`,
+		userID, bf, now)
+	return err
 }
 
 func (r *PostgresUserRepository) MarkVerified(ctx context.Context, userID string, when time.Time) error {

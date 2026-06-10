@@ -39,6 +39,8 @@ type User struct {
 	WeightKG        *float64   `json:"weight_kg,omitempty"`
 	BirthDate       *time.Time `json:"birth_date,omitempty"`
 	Sex             string     `json:"sex,omitempty"`
+	BodyFatPercentage *float64 `json:"body_fat_percentage,omitempty"`
+	WorkoutTime     string     `json:"workout_time,omitempty"` // "HH:MM" local
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
 }
